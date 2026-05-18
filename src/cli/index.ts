@@ -21,6 +21,7 @@ import { registerQuotaCommand } from './commands/quota.js';
 import { registerRateLimitCommand } from './commands/rate-limit.js';
 import { registerApprovalCommand } from './commands/approval.js';
 import { registerWebhookCommand } from './commands/webhook.js';
+import { registerTenantCommand } from './commands/tenant.js';
 
 async function main() {
   const program = new Command();
@@ -51,6 +52,7 @@ async function main() {
   registerRateLimitCommand(program);
   registerApprovalCommand(program);
   registerWebhookCommand(program);
+  registerTenantCommand(program);
 
   await program.parseAsync(process.argv);
 }
