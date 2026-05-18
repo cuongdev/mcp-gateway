@@ -161,4 +161,51 @@ export class PrincipalRepo {
       args: [disabled ? 1 : 0, id],
     });
   }
+
+  async findByOidc(
+    oidcSubject: string,
+    oidcProviderId: string,
+  ): Promise<PrincipalRow | null> {
+    const r = await this.client.execute({
+      sql: `SELECT principal_id FROM users
+            WHERE oidc_subject = ? AND oidc_provider_id = ?`,
+      args: [oidcSubject, oidcProviderId],
+    });
+    if (r.rows.length === 0) return null;
+    return this.findById(r.rows[0].principal_id as string);
+  }
+
+  async upsertOidcUser(input: {
+    oidcSubject: string;
+    oidcProviderId: string;
+    email: string;
+    displayName: string;
+  }): Promise<PrincipalRow> {
+    const existing = await this.findByOidc(input.oidcSubject, input.oidcProviderId);
+    if (existing) {
+      await this.client.execute({
+        sql: `UPDATE users SET email = ? WHERE principal_id = ?`,
+        args: [input.email, existing.id],
+      });
+      await this.client.execute({
+        sql: `UPDATE principals SET display_name = ? WHERE id = ?`,
+        args: [input.displayName, existing.id],
+      });
+      const refreshed = await this.findById(existing.id);
+      if (!refreshed) throw new Error('Principal disappeared mid-upsert');
+      return refreshed;
+    }
+    const { newId } = await import('../../utils/uuid.js');
+    const id = newId();
+    await this.createUser({
+      id,
+      email: input.email,
+      displayName: input.displayName,
+      oidcSubject: input.oidcSubject,
+      oidcProviderId: input.oidcProviderId,
+    });
+    const created = await this.findById(id);
+    if (!created) throw new Error('createUser succeeded but findById returned null');
+    return created;
+  }
 }
