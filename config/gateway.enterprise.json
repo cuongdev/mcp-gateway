@@ -1,0 +1,98 @@
+{
+  "mode": "enterprise",
+
+  "gateway": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "mcpPath": "/mcp",
+    "apiPath": "/api",
+    "corsOrigins": ["https://your-app.com"],
+    "requestTimeout": 30000
+  },
+
+  "oidc": {
+    "enabled": true,
+    "discoveryUrl": "https://your-provider.com/.well-known/openid-configuration",
+    "clientId": "mcp-gateway",
+    "audiences": ["mcp-gateway"],
+    "scopes": ["openid", "profile", "email"],
+    "rolesClaim": "roles",
+    "orgClaim": "org_id",
+    "tokenCache": {
+      "enabled": true,
+      "ttl": 300,
+      "maxSize": 1000
+    }
+  },
+
+  "authorization": {
+    "enabled": true,
+    "modelFile": "./config/policy.model.conf",
+    "policyFile": "./config/policy.csv",
+    "defaultDecision": "deny",
+    "cache": { "enabled": true, "ttl": 600 }
+  },
+
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://mcp-filesystem:8001/mcp",
+        "bearerToken": "your-server-token",
+        "timeout": 30000
+      },
+      "autoDiscover": true
+    },
+    {
+      "name": "database",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://mcp-database:8002/mcp",
+        "bearerToken": "your-server-token",
+        "timeout": 30000
+      },
+      "autoDiscover": true
+    },
+    {
+      "name": "local-scripts",
+      "transport": {
+        "type": "stdio",
+        "command": "node",
+        "args": ["./scripts/mcp-server.js"],
+        "stateful": true,
+        "idleTimeoutMs": 300000
+      },
+      "autoDiscover": false
+    }
+  ],
+
+  "groups": [
+    {
+      "name": "data-analyst",
+      "description": "Read-only data tools for analysts",
+      "tools": ["database__query_data", "database__get_report"],
+      "allowedRoles": ["analyst", "admin"]
+    },
+    {
+      "name": "full-access",
+      "description": "All tools for admins",
+      "tools": [],
+      "allowedRoles": ["admin"]
+    }
+  ],
+
+  "audit": {
+    "enabled": true,
+    "storage": "file",
+    "logPath": "./logs/audit.jsonl",
+    "maxFileSize": 10485760,
+    "retentionDays": 90
+  },
+
+  "monitoring": {
+    "metricsEnabled": true,
+    "metricsPath": "/metrics",
+    "healthCheckPath": "/health"
+  }
+}

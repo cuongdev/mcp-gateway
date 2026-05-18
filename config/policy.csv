@@ -1,0 +1,39 @@
+# ============================================================
+# Access Control Policies
+# Format: p, subject, object, action
+# ============================================================
+
+# ── Admin: full access to everything ────────────────────
+p, admin, *, *
+
+# ── Analyst: read access + execute data tools ───────────
+p, analyst, tool:*, read
+p, analyst, resource:*, read
+p, analyst, prompt:*, execute
+p, analyst, tool:query_data, execute
+p, analyst, tool:get_report, execute
+p, analyst, tool:list_files, execute
+p, analyst, system:lifecycle, execute
+
+# ── User: limited tool access ──────────────────────────
+p, user, tool:search, execute
+p, user, tool:get_info, execute
+p, user, resource:public/*, read
+p, user, prompt:*, execute
+p, user, system:lifecycle, execute
+
+# ── Guest: read-only access to public resources ────────
+p, guest, resource:public/*, read
+p, guest, system:lifecycle, execute
+
+# ── Role hierarchy ─────────────────────────────────────
+# admin inherits analyst permissions (and analyst inherits user)
+g, admin, analyst
+g, analyst, user
+g, user, guest
+
+# ── User → Role assignments (examples) ─────────────────
+# g, alice@example.com, admin
+# g, bob@example.com, analyst
+# g, charlie@example.com, user
+# g, visitor@example.com, guest

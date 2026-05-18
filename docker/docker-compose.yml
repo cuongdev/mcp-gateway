@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  mcp-gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3000:3000"   # Gateway API
+      - "9090:9090"   # Metrics
+    environment:
+      - NODE_ENV=production
+      - GATEWAY_PORT=3000
+      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+      - OIDC_AUDIENCES=${OIDC_AUDIENCES}
+    volumes:
+      - ./config:/app/config:ro
+      - gateway-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  gateway-logs:

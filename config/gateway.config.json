@@ -1,0 +1,77 @@
+{
+  "mode": "development",
+
+  "gateway": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "mcpPath": "/mcp",
+    "apiPath": "/api",
+    "corsOrigins": ["*"],
+    "requestTimeout": 30000
+  },
+
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8001/mcp",
+        "timeout": 30000
+      },
+      "autoDiscover": true,
+      "healthCheck": { "enabled": true, "intervalMs": 30000 }
+    },
+    {
+      "name": "database",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8002/mcp",
+        "timeout": 30000
+      },
+      "autoDiscover": true,
+      "healthCheck": { "enabled": true, "intervalMs": 30000 }
+    }
+  ],
+
+  "groups": [
+    {
+      "name": "data-analyst",
+      "description": "Read-only data access tools",
+      "tools": [
+        "database__query_data",
+        "database__get_report",
+        "filesystem__read_file"
+      ],
+      "allowedRoles": ["analyst", "admin"]
+    },
+    {
+      "name": "devops",
+      "description": "Infrastructure management tools",
+      "tools": [
+        "filesystem__read_file",
+        "filesystem__write_file",
+        "filesystem__list_directory"
+      ],
+      "allowedRoles": ["admin"]
+    }
+  ],
+
+  "authorization": {
+    "enabled": false,
+    "modelFile": "./config/policy.model.conf",
+    "policyFile": "./config/policy.csv",
+    "defaultDecision": "allow"
+  },
+
+  "audit": {
+    "enabled": true,
+    "storage": "console",
+    "logPath": "./logs/audit.jsonl"
+  },
+
+  "monitoring": {
+    "metricsEnabled": true,
+    "metricsPath": "/metrics",
+    "healthCheckPath": "/health"
+  }
+}
