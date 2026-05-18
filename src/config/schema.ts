@@ -175,6 +175,24 @@ export const MonitoringConfigSchema = z.object({
   healthCheckPath: z.string().default("/health"),
 });
 
+// ── Quota Schema ──────────────────────────────────────
+
+const QuotaOverrideSchema = z.object({
+  principalType: z.enum(['user', 'service_account', 'mcp_client']).optional(),
+  principalId: z.string().optional(),
+  daily: z.number().int().positive().optional(),
+  monthly: z.number().int().positive().optional(),
+});
+
+const QuotaSchema = z.object({
+  enabled: z.boolean().default(true),
+  default: z.object({
+    daily: z.number().int().positive().optional(),
+    monthly: z.number().int().positive().optional(),
+  }).default({ daily: 10000, monthly: 200000 }),
+  overrides: z.array(QuotaOverrideSchema).default([]),
+}).default({});
+
 // ── Rate Limit Schema ─────────────────────────────────
 
 const RateLimitRuleSchema = z.object({
@@ -272,6 +290,8 @@ export const GatewayConfigSchema = z.object({
   auth: AuthSchema,
 
   rateLimit: RateLimitSchema,
+
+  quota: QuotaSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -306,3 +326,4 @@ export type TransportConfig = z.infer<typeof TransportSchema>;
 export type StorageConfig = z.infer<typeof StorageSchema>;
 export type AuthConfig = z.infer<typeof AuthSchema>;
 export type RateLimitConfig = z.infer<typeof RateLimitSchema>;
+export type QuotaConfig = z.infer<typeof QuotaSchema>;

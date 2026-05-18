@@ -81,6 +81,13 @@ export const rateLimitHits = new Counter({
   registers: [metricsRegistry],
 });
 
+export const quotaExceeded = new Counter({
+  name: "mcp_quota_exceeded_total",
+  help: "Number of quota-denied requests",
+  labelNames: ["principal_type", "period"] as const,
+  registers: [metricsRegistry],
+});
+
 export const upstreamLatency = new Histogram({
   name: "mcp_gateway_upstream_latency_seconds",
   help: "Upstream server response latency in seconds",

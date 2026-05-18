@@ -36,6 +36,9 @@ import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createAuthRoutes } from "./routes/auth.routes.js";
 import { createRateLimiter, type RateLimiter } from "./ratelimit/index.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit/rate-limit.middleware.js";
+import { QuotaService } from "./quota/index.js";
+import { quotaMiddleware } from "./middleware/quota/quota.middleware.js";
+import { dayScope } from "./quota/periods.js";
 import { logger } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +60,8 @@ export class Gateway {
   private policyEngine: PolicyEngine;
   private auditLogger: AuditLogger;
   private rateLimiter?: RateLimiter;
+  private quotaService?: QuotaService;
+  private quotaSweepInterval?: ReturnType<typeof setInterval>;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -207,6 +212,21 @@ export class Gateway {
       log.info({ path: mcpPath, backend: this.config.rateLimit.backend }, "Registered: Rate-limit middleware on MCP path");
     }
 
+    // Mount quota middleware on MCP routes only (after rate-limit).
+    if (this.config.quota.enabled) {
+      this.quotaService = new QuotaService(this.storage, this.config.quota);
+      const mcpPath = this.config.gateway.mcpPath;
+      this.app.use(`${mcpPath}/*`, quotaMiddleware({ quota: this.quotaService }));
+      this.app.use(mcpPath, quotaMiddleware({ quota: this.quotaService }));
+      this.quotaSweepInterval = setInterval(async () => {
+        try {
+          await this.storage.usage.resetBefore(dayScope());
+        } catch { /* log later */ }
+      }, 60 * 60 * 1000);
+      this.quotaSweepInterval.unref?.();
+      log.info({ path: mcpPath }, "Registered: Quota middleware on MCP path");
+    }
+
     // Start HTTP server
     const { port, host } = this.config.gateway;
 
@@ -263,6 +283,10 @@ export class Gateway {
 
     if (this.rateLimiter) {
       await this.rateLimiter.shutdown();
+    }
+
+    if (this.quotaSweepInterval) {
+      clearInterval(this.quotaSweepInterval);
     }
 
     log.info("Gateway shut down complete");
