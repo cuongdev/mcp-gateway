@@ -5,3 +5,9 @@ logs/
 *.log
 .DS_Store
 coverage/
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.env.local
