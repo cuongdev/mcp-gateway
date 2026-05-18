@@ -269,6 +269,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     const name = decodeURIComponent(c.req.param("name"));
     if (!toolRegistry.get(name)) return c.json({ error: "Tool not found" }, 404);
     await toolRegistry.setEnabled(name, false);
+    if (deps.cache) await deps.cache.invalidateTool(name);
     return c.json({ tool: name, enabled: false });
   });
 
@@ -288,6 +289,9 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       cachePerPrincipal: body.cachePerPrincipal ?? existing.cachePerPrincipal,
     });
     await deps.toolRegistry.load();
+    if (existing.cacheable && body.cacheable === false && deps.cache) {
+      await deps.cache.invalidateTool(name);
+    }
     return c.json({ ok: true });
   });
 
