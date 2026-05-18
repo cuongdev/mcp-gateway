@@ -1,207 +1,100 @@
-// ============================================================
-// Tool Registry
-// Central registry of all tools from all upstream MCP servers.
-// Implements canonical naming: server-name__tool-name
-// ============================================================
+import type { StorageAdapter } from '../storage/adapter.js';
+import type { ToolRow } from '../storage/repositories/tool.repo.js';
 
-import type { MCPTool } from "../types/mcp.js";
-import { logger } from "../utils/logger.js";
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
 
-const log = logger.child({ component: "tool-registry" });
-
-/** Separator used in canonical tool names */
-export const CANONICAL_SEPARATOR = "__";
-
-/** A registered tool with server association */
 export interface RegisteredTool {
-  /** Canonical name: server-name__tool-name */
   canonicalName: string;
-  /** Original tool name from the upstream server */
-  originalName: string;
-  /** Server that provides this tool */
   serverName: string;
-  /** Tool description */
-  description?: string;
-  /** Tool input schema */
-  inputSchema: MCPTool["inputSchema"];
-  /** Whether this tool is enabled */
+  originalName: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
   enabled: boolean;
-  /** When this tool was discovered */
-  registeredAt: Date;
+}
+
+function toRegistered(row: ToolRow): RegisteredTool {
+  return {
+    canonicalName: row.canonicalName,
+    serverName: row.serverName,
+    originalName: row.originalName,
+    description: row.description,
+    inputSchema: row.inputSchema,
+    enabled: row.enabled,
+  };
 }
 
 /**
- * ToolRegistry — single source of truth for all tools
- * across all registered upstream MCP servers.
- *
- * Follows MCPJungle's canonical naming pattern:
- *   server-name__tool-name
- *
- * This ensures globally unique tool identifiers even when
- * multiple servers expose tools with the same name.
+ * In-memory mirror of the DB-backed tool registry. Reads are served from
+ * the in-memory map for speed; writes go to the DB and refresh the map.
  */
 export class ToolRegistry {
-  /** canonical-name → RegisteredTool */
-  private tools = new Map<string, RegisteredTool>();
+  private byCanonical = new Map<string, RegisteredTool>();
 
-  /** server-name → set of canonical tool names */
-  private serverTools = new Map<string, Set<string>>();
+  constructor(private readonly storage: StorageAdapter) {}
 
-  // ── Public API ───────────────────────────────────────
+  /** Hydrate in-memory map from DB. Call once on startup. */
+  async load(): Promise<void> {
+    this.byCanonical.clear();
+    const rows = await this.storage.tools.list();
+    for (const r of rows) this.byCanonical.set(r.canonicalName, toRegistered(r));
+  }
 
-  /**
-   * Register all tools discovered from an upstream server.
-   * Replaces any previously registered tools for that server.
-   */
-  registerServerTools(serverName: string, tools: MCPTool[]): void {
-    // Remove old entries for this server
-    this.removeServerTools(serverName);
-
-    const names = new Set<string>();
-
-    for (const tool of tools) {
-      const canonicalName = this.toCanonical(serverName, tool.name);
-
-      const entry: RegisteredTool = {
-        canonicalName,
-        originalName: tool.name,
-        serverName,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        enabled: true,
-        registeredAt: new Date(),
-      };
-
-      this.tools.set(canonicalName, entry);
-      names.add(canonicalName);
-    }
-
-    this.serverTools.set(serverName, names);
-    log.info(
-      { server: serverName, toolCount: tools.length },
-      "Registered tools from server"
+  async registerServerTools(serverName: string, tools: ToolDefinition[]): Promise<void> {
+    await this.storage.tools.replaceServerTools(
+      serverName,
+      tools.map((t) => ({
+        originalName: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })),
     );
-  }
-
-  /**
-   * Remove all tools belonging to a server.
-   */
-  removeServerTools(serverName: string): void {
-    const names = this.serverTools.get(serverName);
-    if (names) {
-      for (const n of names) this.tools.delete(n);
-      this.serverTools.delete(serverName);
-      log.info({ server: serverName }, "Removed server tools");
+    // Refresh map for this server only
+    for (const [k, v] of this.byCanonical) {
+      if (v.serverName === serverName) this.byCanonical.delete(k);
     }
-  }
-
-  /**
-   * Resolve a canonical tool name to (serverName, originalToolName).
-   */
-  resolve(canonicalName: string): { serverName: string; toolName: string } | undefined {
-    const tool = this.tools.get(canonicalName);
-    if (!tool || !tool.enabled) return undefined;
-    return { serverName: tool.serverName, toolName: tool.originalName };
-  }
-
-  /**
-   * Get a single registered tool by canonical name.
-   */
-  get(canonicalName: string): RegisteredTool | undefined {
-    return this.tools.get(canonicalName);
-  }
-
-  /**
-   * Get all enabled tools (as MCP Tool definitions).
-   * Returns tools with canonical names so clients see
-   * globally unique identifiers.
-   */
-  listTools(): MCPTool[] {
-    const result: MCPTool[] = [];
-    for (const tool of this.tools.values()) {
-      if (!tool.enabled) continue;
-      result.push({
-        name: tool.canonicalName,
-        description: tool.description
-          ? `[${tool.serverName}] ${tool.description}`
-          : `[${tool.serverName}]`,
-        inputSchema: tool.inputSchema,
+    for (const t of tools) {
+      const canonical = `${serverName}__${t.name}`;
+      this.byCanonical.set(canonical, {
+        canonicalName: canonical, serverName,
+        originalName: t.name, description: t.description,
+        inputSchema: t.inputSchema, enabled: true,
       });
     }
-    return result;
   }
 
-  /**
-   * List tools for a specific server only.
-   */
-  listServerTools(serverName: string): MCPTool[] {
-    const names = this.serverTools.get(serverName);
-    if (!names) return [];
-
-    const result: MCPTool[] = [];
-    for (const canonicalName of names) {
-      const tool = this.tools.get(canonicalName);
-      if (tool && tool.enabled) {
-        result.push({
-          name: tool.canonicalName,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-        });
-      }
-    }
-    return result;
+  list(): RegisteredTool[] {
+    return Array.from(this.byCanonical.values())
+      .filter((t) => t.enabled)
+      .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
   }
 
-  /**
-   * Enable or disable a specific tool.
-   */
-  setEnabled(canonicalName: string, enabled: boolean): boolean {
-    const tool = this.tools.get(canonicalName);
-    if (!tool) return false;
-    tool.enabled = enabled;
-    log.info({ tool: canonicalName, enabled }, "Tool enable state changed");
-    return true;
-  }
-
-  /**
-   * Get all registered tools (including disabled) as raw entries.
-   */
   listAll(): RegisteredTool[] {
-    return Array.from(this.tools.values());
+    return Array.from(this.byCanonical.values())
+      .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
   }
 
-  /**
-   * Get all server names that have registered tools.
-   */
-  listServers(): string[] {
-    return Array.from(this.serverTools.keys());
+  get(canonicalName: string): RegisteredTool | undefined {
+    return this.byCanonical.get(canonicalName);
   }
 
-  /**
-   * Total number of registered (enabled) tools.
-   */
-  get size(): number {
-    let count = 0;
-    for (const t of this.tools.values()) {
-      if (t.enabled) count++;
+  async setEnabled(canonicalName: string, enabled: boolean): Promise<void> {
+    await this.storage.tools.setEnabled(canonicalName, enabled);
+    const t = this.byCanonical.get(canonicalName);
+    if (t) t.enabled = enabled;
+  }
+
+  async removeServer(serverName: string): Promise<void> {
+    await this.storage.tools.replaceServerTools(serverName, []);
+    for (const [k, v] of this.byCanonical) {
+      if (v.serverName === serverName) this.byCanonical.delete(k);
     }
-    return count;
   }
 
-  // ── Helpers ──────────────────────────────────────────
-
-  /** Build canonical name: server-name__tool-name */
-  toCanonical(serverName: string, toolName: string): string {
-    return `${serverName}${CANONICAL_SEPARATOR}${toolName}`;
-  }
-
-  /** Parse canonical name back to parts */
-  parseCanonical(canonicalName: string): { serverName: string; toolName: string } | undefined {
-    const idx = canonicalName.indexOf(CANONICAL_SEPARATOR);
-    if (idx === -1) return undefined;
-    return {
-      serverName: canonicalName.slice(0, idx),
-      toolName: canonicalName.slice(idx + CANONICAL_SEPARATOR.length),
-    };
+  get size(): number {
+    return this.byCanonical.size;
   }
 }
