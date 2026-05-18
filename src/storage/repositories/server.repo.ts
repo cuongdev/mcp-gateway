@@ -1,6 +1,6 @@
 import type { Client } from '@libsql/client';
 
-export type ServerTransportType = 'streamable-http' | 'stdio' | 'sse';
+export type ServerTransportType = 'streamable-http' | 'stdio' | 'sse' | 'openapi';
 
 export interface ServerRow {
   name: string;

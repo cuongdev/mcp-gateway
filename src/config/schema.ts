@@ -35,9 +35,27 @@ const StdioTransportSchema = z.object({
   idleTimeoutMs: z.number().positive().default(300000),
 });
 
+const OpenApiTransportSchema = z.object({
+  type: z.literal("openapi"),
+  specUrl: z.string().url().optional(),
+  specPath: z.string().optional(),
+  baseUrl: z.string().url().optional(),
+  auth: z.object({
+    type: z.enum(["bearer", "apiKey"]).optional(),
+    token: z.string().optional(),
+    headerName: z.string().optional(),
+  }).optional(),
+  filter: z.object({
+    tags: z.array(z.string()).optional(),
+    operationIds: z.array(z.string()).optional(),
+    exclude: z.array(z.string()).optional(),
+  }).optional(),
+});
+
 const TransportSchema = z.discriminatedUnion("type", [
   HttpTransportSchema,
   StdioTransportSchema,
+  OpenApiTransportSchema,
 ]);
 
 // ── Upstream Server Schema ────────────────────────────
@@ -248,6 +266,15 @@ const TracingSchema = z.object({
   samplingRatio: z.number().min(0).max(1).default(0.1),
 }).default({});
 
+// ── OpenAPI Schema ───────────────────────────────────
+
+const OpenApiConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  allowedDomains: z.array(z.string()).default([]),
+  blockPrivateIps: z.boolean().default(true),
+  maxResponseBytes: z.number().int().positive().default(10_000_000),
+}).default({});
+
 // ── Session Schema ────────────────────────────────────
 
 export const SessionConfigSchema = z.object({
@@ -338,6 +365,8 @@ export const GatewayConfigSchema = z.object({
   webhooks: WebhookConfigSchema,
 
   tracing: TracingSchema,
+
+  openapi: OpenApiConfigSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -384,3 +413,4 @@ export type CacheConfig = z.infer<typeof CacheSchema>;
 export type ApprovalConfig = z.infer<typeof ApprovalSchema>;
 export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
 export type TracingConfig = z.infer<typeof TracingSchema>;
+export type OpenApiConfig = z.infer<typeof OpenApiConfigSchema>;

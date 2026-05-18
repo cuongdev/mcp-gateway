@@ -17,6 +17,8 @@ import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
+import type { OpenApiAdapter } from "../adapters/openapi/adapter.js";
+import type { DiscoveredOpenApiTool } from "../adapters/openapi/operation-to-tool.js";
 import { withSpan, currentTraceparent } from "../observability/spans.js";
 import { upstreamLatency } from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
@@ -117,6 +119,15 @@ export class SessionManager {
   /** server-name → session */
   private sessions = new Map<string, Session>();
 
+  /** canonical tool name → openapi adapter + operation meta */
+  private openapiTools = new Map<
+    string,
+    { adapter: OpenApiAdapter; meta: DiscoveredOpenApiTool["meta"] }
+  >();
+
+  /** server-name → openapi marker (so send() can route correctly) */
+  private openapiServers = new Set<string>();
+
   /** Periodic cleanup interval for idle sessions */
   private cleanupInterval?: ReturnType<typeof setInterval>;
 
@@ -142,6 +153,44 @@ export class SessionManager {
         this.sessions.delete(name);
       }
     }
+  }
+
+  /**
+   * Mark a server as an OpenAPI-backed virtual session. The actual call
+   * dispatch is keyed by canonical tool name via `openapiTools`.
+   */
+  markOpenApiServer(serverName: string): void {
+    this.openapiServers.add(serverName);
+  }
+
+  /**
+   * Register an OpenAPI tool's adapter + operation meta for `tools/call`
+   * dispatch. The canonical tool name is `<server>__<operationId>`.
+   */
+  registerOpenApiTool(
+    canonical: string,
+    adapter: OpenApiAdapter,
+    meta: DiscoveredOpenApiTool["meta"],
+  ): void {
+    this.openapiTools.set(canonical, { adapter, meta });
+  }
+
+  /**
+   * Remove every registered OpenAPI tool whose canonical name starts with
+   * `<serverName>__`. Used before re-registering a server.
+   */
+  clearOpenApiToolsForServer(serverName: string): void {
+    for (const canonical of [...this.openapiTools.keys()]) {
+      if (canonical.startsWith(`${serverName}__`)) {
+        this.openapiTools.delete(canonical);
+      }
+    }
+    this.openapiServers.delete(serverName);
+  }
+
+  /** True iff `name` was marked as an OpenAPI-backed server. */
+  isOpenApiServer(serverName: string): boolean {
+    return this.openapiServers.has(serverName);
   }
 
   /**
@@ -179,6 +228,12 @@ export class SessionManager {
     const servers = await storage.servers.list();
     for (const s of servers) {
       if (!s.enabled) continue;
+      // OpenAPI servers do not have a transport session (no persistent
+      // connection); they are dispatched per-call via `openapiTools`.
+      if (s.transportType === "openapi") {
+        this.markOpenApiServer(s.name);
+        continue;
+      }
       // Reshape DB row (transportType + transportConfig fields) into the
       // TransportConfig union shape that register() expects.
       const transport = {
@@ -309,6 +364,11 @@ export class SessionManager {
     request: JsonRpcRequest,
     timeoutMs?: number
   ): Promise<JsonRpcResponse> {
+    // OpenAPI virtual sessions: dispatch via per-tool adapter map.
+    if (this.openapiServers.has(serverName)) {
+      return this.sendOpenApi(serverName, request);
+    }
+
     const session = this.sessions.get(serverName);
     if (!session) {
       throw new UpstreamConnectionError(serverName, "No session registered");
@@ -327,9 +387,53 @@ export class SessionManager {
   }
 
   /**
+   * Dispatch a JSON-RPC request to an OpenAPI-backed server. Only
+   * `tools/call` is meaningfully implemented; `tools/list` returns the
+   * already-discovered tools from storage so it's routed elsewhere.
+   */
+  private async sendOpenApi(
+    serverName: string,
+    request: JsonRpcRequest,
+  ): Promise<JsonRpcResponse> {
+    if (request.method !== "tools/call") {
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { tools: [] },
+      } as JsonRpcResponse;
+    }
+    const params = request.params as
+      | { name?: string; arguments?: Record<string, unknown> }
+      | undefined;
+    const canonical = params?.name;
+    const entry = this.openapiTools.get(canonical ?? "");
+    if (!entry) {
+      throw new UpstreamConnectionError(
+        serverName,
+        `openapi_tool_not_registered: ${canonical ?? ""}`,
+      );
+    }
+    const args = params?.arguments ?? {};
+    const out = await entry.adapter.call(entry.meta, args);
+    return {
+      jsonrpc: "2.0",
+      id: request.id,
+      result: {
+        content: [{ type: "text", text: JSON.stringify(out.body) }],
+        structuredContent: out.body,
+      },
+    } as JsonRpcResponse;
+  }
+
+  /**
    * Remove a server session and clean up resources.
    */
   remove(serverName: string): void {
+    // OpenAPI virtual sessions: drop registered tools + marker.
+    if (this.openapiServers.has(serverName)) {
+      this.clearOpenApiToolsForServer(serverName);
+    }
+
     const session = this.sessions.get(serverName);
     if (!session) return;
 
@@ -345,7 +449,7 @@ export class SessionManager {
    * Check if a server has an active session.
    */
   has(serverName: string): boolean {
-    return this.sessions.has(serverName);
+    return this.sessions.has(serverName) || this.openapiServers.has(serverName);
   }
 
   /**

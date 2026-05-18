@@ -123,13 +123,147 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.post("/servers", async (c) => {
     const body = await c.req.json() as {
       name: string;
-      transport: TransportConfig;
+      transport: TransportConfig | {
+        type: "openapi";
+        specUrl?: string;
+        specPath?: string;
+        baseUrl?: string;
+        auth?: { type?: "bearer" | "apiKey"; token?: string; headerName?: string };
+        filter?: { tags?: string[]; operationIds?: string[]; exclude?: string[] };
+      };
     };
 
     if (!body.name || !body.transport) {
       return c.json({ error: "name and transport are required" }, 400);
     }
 
+    // ── OpenAPI branch ────────────────────────────────
+    if (body.transport.type === "openapi") {
+      const openapiTransport = body.transport;
+      const openapiCfg = (deps.config as unknown as {
+        openapi?: {
+          enabled: boolean;
+          allowedDomains: string[];
+          blockPrivateIps: boolean;
+          maxResponseBytes: number;
+        };
+      }).openapi ?? {
+        enabled: true,
+        allowedDomains: [],
+        blockPrivateIps: true,
+        maxResponseBytes: 10_000_000,
+      };
+
+      // Pre-check baseUrl through SSRF guard if explicitly provided.
+      if (openapiTransport.baseUrl) {
+        const { checkUrl } = await import("../adapters/openapi/ssrf-guard.js");
+        const guard = await checkUrl(openapiTransport.baseUrl, {
+          allowedDomains: openapiCfg.allowedDomains,
+          blockPrivateIps: openapiCfg.blockPrivateIps,
+        });
+        if (!guard.ok) {
+          return c.json(
+            { error: { code: "ssrf_blocked", reason: guard.reason } },
+            400,
+          );
+        }
+      }
+
+      // Pre-check specUrl through SSRF guard too — it's fetched server-side.
+      if (openapiTransport.specUrl) {
+        const { checkUrl } = await import("../adapters/openapi/ssrf-guard.js");
+        const guard = await checkUrl(openapiTransport.specUrl, {
+          allowedDomains: openapiCfg.allowedDomains,
+          blockPrivateIps: openapiCfg.blockPrivateIps,
+        });
+        if (!guard.ok) {
+          return c.json(
+            { error: { code: "ssrf_blocked", reason: guard.reason } },
+            400,
+          );
+        }
+      }
+
+      let loaded;
+      try {
+        const { loadOpenApiSpec } = await import(
+          "../adapters/openapi/spec-loader.js"
+        );
+        loaded = await loadOpenApiSpec({
+          specUrl: openapiTransport.specUrl,
+          specPath: openapiTransport.specPath,
+          filter: openapiTransport.filter,
+        });
+      } catch (err) {
+        log.error({ server: body.name, err }, "Failed to load OpenAPI spec");
+        return c.json(
+          {
+            error: {
+              code: "openapi_spec_load_failed",
+              detail: err instanceof Error ? err.message : String(err),
+            },
+          },
+          400,
+        );
+      }
+
+      if (loaded.tools.length > 200) {
+        return c.json(
+          { error: { code: "too_many_operations", count: loaded.tools.length } },
+          400,
+        );
+      }
+
+      try {
+        await storage.servers.upsert({
+          name: body.name,
+          transportType: "openapi" as ServerTransportType,
+          transportConfig: openapiTransport as unknown as Record<string, unknown>,
+          autoDiscover: false,
+        });
+        await storage.tools.replaceServerTools(
+          body.name,
+          loaded.tools.map((t) => ({
+            originalName: t.originalName,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })),
+        );
+        await toolRegistry.load();
+      } catch (err) {
+        log.error({ server: body.name, err }, "Failed to persist OpenAPI server");
+        return c.json({ error: "Failed to persist server" }, 500);
+      }
+
+      const { OpenApiAdapter } = await import("../adapters/openapi/adapter.js");
+      sessionManager.clearOpenApiToolsForServer(body.name);
+      sessionManager.markOpenApiServer(body.name);
+      const adapter = new OpenApiAdapter(
+        openapiTransport,
+        openapiCfg,
+        loaded.baseUrl,
+      );
+      for (const t of loaded.tools) {
+        sessionManager.registerOpenApiTool(
+          `${body.name}__${t.originalName}`,
+          adapter,
+          t.meta,
+        );
+      }
+
+      log.info(
+        { server: body.name, toolCount: loaded.tools.length },
+        "OpenAPI server registered and tools discovered",
+      );
+
+      return c.json({
+        server: body.name,
+        tools: loaded.tools.map((t) => `${body.name}__${t.originalName}`),
+        discovered: loaded.tools.length,
+      }, 201);
+    }
+
+    // ── Stdio / Streamable-HTTP branch ────────────────
     // Persist to storage so the server survives restarts.
     try {
       await storage.servers.upsert({
