@@ -109,3 +109,13 @@ Also: `GET /api/servers` currently lists only servers whose tools have been disc
   A: Not in P0. The `token rotate` command ships in P1. For now, manually update the `tokens` row via SQLite client (rotate `hash` + `prefix` after regenerating the token offline).
 - **Q: My old `policy.csv` had role hierarchies — do those still work?**
   A: Yes. The `migrate seed --policy` command parses both `p` (permission) and `g` (group/role) rules.
+
+## P1 (v0.3.0-p1) additions
+
+- New admin endpoints: `/api/mcp-clients`, `/api/users`, `/api/users/me/tokens`, `/api/prompts`, `/api/usage`
+- New CLI commands: `register`, `deregister`, `list`, `enable`, `disable`, `invoke`, `create-mcp-client`, `create-user`, `create-group`, `role assign`, `token list/create/revoke`, `config export/import`, `policy export/import`, `usage`
+- Group enhancements: `included_servers` and `excluded_tools` fields
+- HTTP transport: `session_mode: stateless | stateful`, custom `headers`, env substitution `${VAR}`
+- Postgres adapter via `STORAGE_DRIVER=postgres DATABASE_URL=postgres://...`
+- Docker variant: `Dockerfile.stdio` with Node + uv + npx; `docker-compose.prod.yml` with Postgres
+- OIDC callback unification with session cookies is partially shipped (cookie middleware + signing helper); full OIDC-callback rewiring deferred — see TODO in `src/middleware/auth/oidc.middleware.ts`.

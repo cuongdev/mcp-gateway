@@ -158,6 +158,17 @@ g, analyst, user
 g, alice@example.com, admin
 ```
 
+## What's New in v0.3.0-p1
+
+- **MCP client provisioning** — `/api/mcp-clients` with allowlists and token rotation
+- **User accounts + PATs** — `/api/users`, `/api/users/me/tokens`; group RBAC for MCP clients
+- **Prompt registry** — `/api/prompts` for versioned, templated system prompts
+- **Usage stats** — `/api/usage` endpoint (per-server, per-tool, per-principal)
+- **Full mcp-gateway CLI** — `register`, `deregister`, `invoke`, `role assign`, `token`, `config`, `policy`, `usage`, and more
+- **Postgres adapter** — `STORAGE_DRIVER=postgres DATABASE_URL=postgres://...`
+- **HTTP session modes** — `session_mode: stateless | stateful`, custom headers, env var substitution `${VAR}`
+- **Docker** — `Dockerfile.stdio` (Node + uv + npx) and `docker-compose.prod.yml` with Postgres
+
 ## Tech Stack
 
 - **Hono** — HTTP framework
