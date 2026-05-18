@@ -9,6 +9,8 @@ export interface ToolGroup {
   enabled: boolean;
   allowedRoles: string[];
   createdAt: number;
+  includedServers: string[];
+  excludedTools: string[];
 }
 
 export interface CreateGroupOptions {
@@ -24,6 +26,8 @@ function toGroup(row: GroupRow): ToolGroup {
     enabled: row.enabled,
     allowedRoles: row.allowedRoles,
     createdAt: row.createdAt,
+    includedServers: row.includedServers ?? [],
+    excludedTools: row.excludedTools ?? [],
   };
 }
 
@@ -81,6 +85,15 @@ export class ToolGroupManager {
   resolveTools(name: string): string[] {
     const g = this.byName.get(name);
     if (!g) return [];
-    return g.tools.filter((t) => this.registry.get(t)?.enabled);
+    const set = new Set<string>(g.tools);
+    for (const serverName of g.includedServers) {
+      for (const t of this.registry.listAll()) {
+        if (t.serverName === serverName) set.add(t.canonicalName);
+      }
+    }
+    for (const ex of g.excludedTools) {
+      set.delete(ex);
+    }
+    return Array.from(set).filter((t) => this.registry.get(t)?.enabled).sort();
   }
 }
