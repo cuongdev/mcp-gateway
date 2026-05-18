@@ -174,6 +174,11 @@ function mergeEnvVars(config: Record<string, unknown>): Record<string, unknown> 
     if (env["OIDC_AUDIENCES"]) set(merged, "oidc.audiences", env["OIDC_AUDIENCES"]!.split(","));
   }
 
+  // Storage
+  if (env["STORAGE_DRIVER"]) set(merged, "storage.driver", env["STORAGE_DRIVER"]);
+  if (env["DATABASE_URL"]) set(merged, "storage.url", env["DATABASE_URL"]);
+  if (env["STORAGE_PATH"]) set(merged, "storage.path", env["STORAGE_PATH"]);
+
   // Authorization
   if (env["AUTHZ_MODEL_FILE"]) set(merged, "authorization.modelFile", env["AUTHZ_MODEL_FILE"]);
   if (env["AUTHZ_POLICY_FILE"]) set(merged, "authorization.policyFile", env["AUTHZ_POLICY_FILE"]);

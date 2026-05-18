@@ -1,0 +1,25 @@
+# Dockerfile.stdio — gateway image with Node + Python (uv/uvx) + npx for STDIO upstream servers
+FROM node:22-slim
+
+# Install python + uv for `uvx`-based MCP servers
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates python3 python3-pip \
+  && pip3 install --break-system-packages uv \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY src ./src
+COPY tsconfig.json ./
+COPY config ./config
+COPY bin ./bin
+COPY docs ./docs
+
+RUN npm install -g tsx
+RUN chmod +x bin/mcp-gateway
+
+EXPOSE 3000
+CMD ["tsx", "src/index.ts"]

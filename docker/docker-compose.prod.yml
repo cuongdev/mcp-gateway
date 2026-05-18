@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: mcp
+      POSTGRES_USER: mcp
+      POSTGRES_DB: mcp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mcp"]
+      interval: 5s
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.stdio
+    environment:
+      GATEWAY_MODE: enterprise
+      GATEWAY_PORT: '3000'
+      STORAGE_DRIVER: postgres
+      DATABASE_URL: postgres://mcp:mcp@postgres:5432/mcp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    command: ["tsx", "src/index.ts", "/app/config/gateway.enterprise.json"]
+
+volumes:
+  pgdata:
