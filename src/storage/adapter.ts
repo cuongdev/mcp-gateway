@@ -8,6 +8,7 @@ import type { AuditRepo } from './repositories/audit.repo.js';
 import type { PromptRepo } from './repositories/prompt.repo.js';
 import type { UsageCounterRepo } from './repositories/usage-counter.repo.js';
 import type { CacheEntryRepo } from './repositories/cache-entry.repo.js';
+import type { ApprovalRepo } from './repositories/approval.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -31,4 +32,5 @@ export interface StorageAdapter {
   prompts: PromptRepo;
   usage: UsageCounterRepo;
   cache: CacheEntryRepo;
+  approvals: ApprovalRepo;
 }

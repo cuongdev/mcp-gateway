@@ -11,6 +11,7 @@ import { AuditRepo } from './repositories/audit.repo.js';
 import { PromptRepo } from './repositories/prompt.repo.js';
 import { UsageCounterRepo } from './repositories/usage-counter.repo.js';
 import { CacheEntryRepo } from './repositories/cache-entry.repo.js';
+import { ApprovalRepo } from './repositories/approval.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -29,6 +30,7 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly prompts: PromptRepo;
   public readonly usage: UsageCounterRepo;
   public readonly cache: CacheEntryRepo;
+  public readonly approvals: ApprovalRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -42,6 +44,7 @@ export class SqliteAdapter implements StorageAdapter {
     this.prompts = new PromptRepo(this.client);
     this.usage = new UsageCounterRepo(this.client);
     this.cache = new CacheEntryRepo(this.client);
+    this.approvals = new ApprovalRepo(this.client);
   }
 
   async init(): Promise<void> {
