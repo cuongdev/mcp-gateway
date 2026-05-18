@@ -175,6 +175,23 @@ export const MonitoringConfigSchema = z.object({
   healthCheckPath: z.string().default("/health"),
 });
 
+// ── Rate Limit Schema ─────────────────────────────────
+
+const RateLimitRuleSchema = z.object({
+  principalType: z.enum(['user', 'service_account', 'mcp_client']).optional(),
+  principalId: z.string().optional(),
+  tool: z.string().optional(),
+  limit: z.string().regex(/^\d+\/(sec|second|min|minute|hour|hr|day|d)$/),
+});
+
+const RateLimitSchema = z.object({
+  enabled: z.boolean().default(true),
+  backend: z.enum(['memory', 'redis']).default('memory'),
+  redisUrl: z.string().nullable().default(null),
+  default: z.string().regex(/^\d+\//).default('1000/min'),
+  rules: z.array(RateLimitRuleSchema).default([]),
+}).default({});
+
 // ── Session Schema ────────────────────────────────────
 
 export const SessionConfigSchema = z.object({
@@ -253,6 +270,8 @@ export const GatewayConfigSchema = z.object({
   storage: StorageSchema,
 
   auth: AuthSchema,
+
+  rateLimit: RateLimitSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -286,3 +305,4 @@ export type ToolGroupConfig = z.infer<typeof ToolGroupSchema>;
 export type TransportConfig = z.infer<typeof TransportSchema>;
 export type StorageConfig = z.infer<typeof StorageSchema>;
 export type AuthConfig = z.infer<typeof AuthSchema>;
+export type RateLimitConfig = z.infer<typeof RateLimitSchema>;

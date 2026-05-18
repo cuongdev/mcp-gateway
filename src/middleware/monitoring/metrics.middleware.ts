@@ -74,6 +74,13 @@ export const activeConnections = new Gauge({
   registers: [metricsRegistry],
 });
 
+export const rateLimitHits = new Counter({
+  name: "mcp_rate_limit_hits_total",
+  help: "Number of requests denied by rate limiter",
+  labelNames: ["principal_type", "rule"] as const,
+  registers: [metricsRegistry],
+});
+
 export const upstreamLatency = new Histogram({
   name: "mcp_gateway_upstream_latency_seconds",
   help: "Upstream server response latency in seconds",

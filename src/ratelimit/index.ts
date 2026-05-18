@@ -1,6 +1,7 @@
 import type { Rule } from './rules.js';
 import { matchRule, parseLimit } from './rules.js';
 import { MemoryRateLimitBackend } from './memory.backend.js';
+import type { GatewayConfig } from '../config/schema.js';
 
 export interface RateLimitDecision {
   allowed: boolean;
@@ -20,16 +21,7 @@ export interface RateLimiterOptions {
   backend: RateLimitBackend;
 }
 
-// Inline shape — Task 10 will wire this to GatewayConfig['rateLimit'] once the schema lands.
-interface RateLimitConfigShape {
-  enabled: boolean;
-  backend: 'memory' | 'redis';
-  redisUrl: string | null;
-  default: string;
-  rules: Rule[];
-}
-
-export async function createRateLimiter(cfg: RateLimitConfigShape): Promise<RateLimiter> {
+export async function createRateLimiter(cfg: GatewayConfig['rateLimit']): Promise<RateLimiter> {
   let backend: RateLimitBackend;
   if (cfg.backend === 'redis') {
     if (!cfg.redisUrl) throw new Error('rateLimit.backend=redis requires rateLimit.redisUrl');

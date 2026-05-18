@@ -34,6 +34,8 @@ import { AuditLogger } from "./middleware/audit/audit.logger.js";
 import { createMCPRoutes } from "./routes/mcp.routes.js";
 import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createAuthRoutes } from "./routes/auth.routes.js";
+import { createRateLimiter, type RateLimiter } from "./ratelimit/index.js";
+import { rateLimitMiddleware } from "./middleware/rate-limit/rate-limit.middleware.js";
 import { logger } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +56,7 @@ export class Gateway {
   private sessionManager: SessionManager;
   private policyEngine: PolicyEngine;
   private auditLogger: AuditLogger;
+  private rateLimiter?: RateLimiter;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -193,6 +196,17 @@ export class Gateway {
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
 
+    // Mount rate-limit middleware on MCP routes only (requires async backend init).
+    // Registered BEFORE the HTTP server starts; Hono dispatches middleware by
+    // path pattern regardless of route-registration order.
+    if (this.config.rateLimit.enabled) {
+      this.rateLimiter = await createRateLimiter(this.config.rateLimit);
+      const mcpPath = this.config.gateway.mcpPath;
+      this.app.use(`${mcpPath}/*`, rateLimitMiddleware({ rateLimiter: this.rateLimiter }));
+      this.app.use(`${mcpPath}`, rateLimitMiddleware({ rateLimiter: this.rateLimiter }));
+      log.info({ path: mcpPath, backend: this.config.rateLimit.backend }, "Registered: Rate-limit middleware on MCP path");
+    }
+
     // Start HTTP server
     const { port, host } = this.config.gateway;
 
@@ -246,6 +260,10 @@ export class Gateway {
     }
 
     await this.sessionManager.shutdown();
+
+    if (this.rateLimiter) {
+      await this.rateLimiter.shutdown();
+    }
 
     log.info("Gateway shut down complete");
   }
