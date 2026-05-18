@@ -33,6 +33,7 @@
 // ============================================================
 
 import { Hono } from "hono";
+import { z } from "zod";
 import type { GatewayVariables } from "../middleware/types.js";
 import type { GatewayConfig } from "../config/schema.js";
 import type { ToolRegistry } from "../registry/tool.registry.js";
@@ -171,6 +172,18 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       log.warn({ server: name, err }, "Failed to delete server from storage");
     }
     log.info({ server: name }, "Server deregistered");
+    return c.json({ ok: true });
+  });
+
+  /** Enable or disable a server */
+  app.patch("/servers/:name", async (c) => {
+    const name = c.req.param("name");
+    const existing = await storage.servers.findByName(name);
+    if (!existing) return c.json({ error: { code: "not_found" } }, 404);
+    const body = z.object({ enabled: z.boolean().optional() }).parse(await c.req.json());
+    if (body.enabled !== undefined) {
+      await storage.servers.setEnabled(name, body.enabled);
+    }
     return c.json({ ok: true });
   });
 
