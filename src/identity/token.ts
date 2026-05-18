@@ -49,7 +49,7 @@ export function parseToken(raw: string): ParsedToken | null {
     raw,
     type: type as TokenType,
     env: env as TokenEnv,
-    prefix: raw.slice(0, hLen + 8),
+    prefix: raw.slice(0, TOKEN_PREFIX_LEN),
     secret,
   };
 }
