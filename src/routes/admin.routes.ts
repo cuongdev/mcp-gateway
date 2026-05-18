@@ -268,6 +268,25 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     return c.json({ tool: name, enabled: false });
   });
 
+  /** Set cache flags on a tool */
+  app.patch("/tools/:name", async (c) => {
+    const name = c.req.param("name");
+    const existing = await deps.storage.tools.findByCanonicalName(name);
+    if (!existing) return c.json({ error: { code: "not_found" } }, 404);
+    const body = z.object({
+      cacheable: z.boolean().optional(),
+      cacheTtlSec: z.number().int().positive().nullable().optional(),
+      cachePerPrincipal: z.boolean().optional(),
+    }).parse(await c.req.json());
+    await deps.storage.tools.setCacheFlags(name, {
+      cacheable: body.cacheable ?? existing.cacheable,
+      cacheTtlSec: body.cacheTtlSec === undefined ? existing.cacheTtlSec : body.cacheTtlSec,
+      cachePerPrincipal: body.cachePerPrincipal ?? existing.cachePerPrincipal,
+    });
+    await deps.toolRegistry.load();
+    return c.json({ ok: true });
+  });
+
   // ═══════════════════════════════════════════════════════
   // Tool Groups
   // ═══════════════════════════════════════════════════════

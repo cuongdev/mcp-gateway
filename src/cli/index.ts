@@ -15,6 +15,7 @@ import { registerTokenCommand } from './commands/token.js';
 import { registerConfigCommand } from './commands/config.js';
 import { registerPolicyCommand } from './commands/policy.js';
 import { registerUsageCommand } from './commands/usage.js';
+import { registerToolFlagCommand } from './commands/tool-flag.js';
 
 async function main() {
   const program = new Command();
@@ -39,6 +40,7 @@ async function main() {
   registerConfigCommand(program);
   registerPolicyCommand(program);
   registerUsageCommand(program);
+  registerToolFlagCommand(program);
 
   await program.parseAsync(process.argv);
 }
