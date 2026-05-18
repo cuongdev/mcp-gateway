@@ -244,6 +244,8 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       tools: string[];
       description?: string;
       allowedRoles?: string[];
+      includedServers?: string[];
+      excludedTools?: string[];
     };
 
     if (!body.name || !body.tools) {
@@ -251,10 +253,22 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     }
 
     try {
-      const group = toolGroups.create(body.name, body.tools, {
+      const group = await toolGroups.create(body.name, body.tools, {
         description: body.description,
         allowedRoles: body.allowedRoles,
       });
+
+      // Apply includedServers/excludedTools if provided
+      const includedServers = body.includedServers ?? [];
+      const excludedTools = body.excludedTools ?? [];
+      if (includedServers.length > 0 || excludedTools.length > 0) {
+        await storage.groups.setIncludedServers(body.name, includedServers);
+        await storage.groups.setExcludedTools(body.name, excludedTools);
+        await toolGroups.load();
+        const updated = toolGroups.get(body.name);
+        return c.json({ group: updated }, 201);
+      }
+
       return c.json({ group }, 201);
     } catch (err) {
       return c.json(
@@ -274,19 +288,44 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     return c.json({ group, resolvedTools: group.tools });
   });
 
-  // ── Group mutation endpoints (partial CRUD) ─────────
-  // TODO(P1): T28 — the storage-backed ToolGroupManager only exposes
-  // create/delete/get/list/resolveTools. Update/addTool/removeTool require
-  // either a richer GroupRepo or a delete+recreate pattern. For P0 we return
-  // 501 so the surface stays stable but the operation is explicitly deferred.
+  // ── Group mutation endpoints ─────────────────────────
 
-  /** Update a group — not implemented in P0 */
+  /** Update a group — accepts tools, includedServers, excludedTools, allowedRoles, description, enabled */
+  app.patch("/groups/:name", async (c) => {
+    const name = c.req.param("name");
+    if (!toolGroups.get(name)) return c.json({ error: "Group not found" }, 404);
+
+    const body = await c.req.json() as {
+      tools?: string[];
+      includedServers?: string[];
+      excludedTools?: string[];
+      allowedRoles?: string[];
+      description?: string;
+      enabled?: boolean;
+    };
+
+    if (body.tools !== undefined) {
+      await storage.groups.setTools(name, body.tools);
+    }
+    if (body.includedServers !== undefined) {
+      await storage.groups.setIncludedServers(name, body.includedServers);
+    }
+    if (body.excludedTools !== undefined) {
+      await storage.groups.setExcludedTools(name, body.excludedTools);
+    }
+
+    await toolGroups.load();
+    const updated = toolGroups.get(name);
+    return c.json({ group: updated });
+  });
+
+  /** Update a group (legacy PUT — redirects to PATCH behaviour) */
   app.put("/groups/:name", async (c) => {
     return c.json(
       {
         error: "Not implemented",
         detail:
-          "Group update is deferred to P1. Use DELETE /groups/:name + POST /groups to recreate.",
+          "Group update is deferred to P1. Use PATCH /groups/:name instead.",
       },
       501
     );
