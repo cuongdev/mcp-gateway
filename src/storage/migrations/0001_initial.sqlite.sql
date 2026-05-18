@@ -1,6 +1,6 @@
 -- 0001_initial.sqlite.sql — P0 schema
 
-CREATE TABLE schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
   version    INTEGER PRIMARY KEY,
   applied_at INTEGER NOT NULL
 );
