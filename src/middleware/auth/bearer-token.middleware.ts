@@ -18,6 +18,10 @@ export function bearerTokenMiddleware(opts: BearerTokenOptions): MiddlewareHandl
   return async (c, next) => {
     if (opts.skip) return next();
 
+    // If an earlier auth middleware (e.g. session-cookie) already set a
+    // principal, defer to it — bearer-token acts as a fallback only.
+    if (c.get('principal')) return next();
+
     const header = c.req.header('Authorization') ?? c.req.header('authorization');
     if (!header) return unauthorized(c, 'missing_token', 'Authorization header required');
 

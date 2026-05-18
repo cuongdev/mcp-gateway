@@ -4,6 +4,26 @@
 // Validates Bearer tokens or session cookies.
 // Supports multiple OIDC providers simultaneously.
 // Delegates to resolveUser() from auth.routes.ts.
+//
+// TODO(P1 / task-24): Unify with the new Principal model.
+//   The OAuth2 callback in `routes/auth.routes.ts` currently issues a
+//   session cookie whose payload is a `UserContext` (sub / email / roles).
+//   That cookie is interpreted by `resolveUser()` here.
+//
+//   The new `sessionCookieMiddleware` (src/middleware/auth/session-cookie.middleware.ts)
+//   reads a `{ pid: principalId }` cookie and resolves it to a Principal via
+//   the storage layer.
+//
+//   Future integration steps:
+//     1. On successful OIDC callback (auth.routes.ts → /callback/:id), do a
+//        find-or-create on `principals`/`users` matched by
+//        `oidc_subject + oidc_provider_id`. The PrincipalRepo would need a
+//        new `findByOidc(subject, providerId)` method (and the migrations
+//        already include a unique index on those columns).
+//     2. Use `signSessionCookie({ principalId }, secret)` to issue the
+//        unified cookie shape.
+//     3. Retire this `createAuthMiddleware` factory in favor of the
+//        unified pipeline (sessionCookie → bearerToken → dev-anonymous).
 // ============================================================
 
 import type { MiddlewareHandler } from "hono";

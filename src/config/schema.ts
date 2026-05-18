@@ -144,6 +144,14 @@ export const AuthSchema = z.object({
   bearerTokenHeader: z.string().default("Authorization"),
   requireAuthForApi: z.boolean().optional(),      // resolved by transform per mode
   requireAuthForMcp: z.boolean().optional(),
+  /**
+   * Secret (≥32 chars) for signing the unified session cookie JWT.
+   * When set, `sessionCookieMiddleware` is mounted ahead of bearer-token
+   * authentication so OIDC-issued cookies authenticate the request.
+   */
+  sessionCookieSecret: z.string().min(32).optional(),
+  /** Cookie name used by `sessionCookieMiddleware` (default `mcp_session`). */
+  sessionCookieName: z.string().default("mcp_session"),
 }).default({});
 
 // ── Audit Schema ──────────────────────────────────────

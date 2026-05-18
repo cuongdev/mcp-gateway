@@ -17,6 +17,7 @@ import type { StorageAdapter } from "../storage/adapter.js";
 import { logger } from "../utils/logger.js";
 import { anonymousDev } from "../identity/principal.js";
 import { bearerTokenMiddleware } from "./auth/bearer-token.middleware.js";
+import { sessionCookieMiddleware } from "./auth/session-cookie.middleware.js";
 
 // Middleware factories
 import { createAuthMiddleware } from "./auth/oidc.middleware.js";
@@ -91,7 +92,29 @@ export function buildMiddlewarePipeline(
     log.info("Development mode: anonymous principal injected");
   }
 
-  // ── 4b. Bearer token authentication ─────────────────
+  // ── 4b. Session cookie authentication ───────────────
+  // Mounted BEFORE bearer-token so OIDC-issued cookies authenticate the
+  // request first; bearer-token MW remains as the fallback path. The cookie
+  // MW passes through silently on absent/invalid cookies — it never 401s.
+  if (config.auth?.sessionCookieSecret) {
+    const sessionSecret = new TextEncoder().encode(config.auth.sessionCookieSecret);
+    const cookieName = config.auth.sessionCookieName ?? "mcp_session";
+    const cookieMw = sessionCookieMiddleware({
+      storage: deps.storage,
+      secret: sessionSecret,
+      cookieName,
+    });
+    if (config.auth?.requireAuthForApi) {
+      app.use(`${apiPath}/*`, cookieMw);
+    }
+    if (config.auth?.requireAuthForMcp) {
+      app.use(`${mcpPath}/*`, cookieMw);
+      app.use(`${mcpPath}`, cookieMw);
+    }
+    log.info({ cookieName }, "Registered: Session-cookie middleware (before bearer-token)");
+  }
+
+  // ── 4c. Bearer token authentication ─────────────────
   // Wired before OIDC so service-account tokens are honored on protected paths.
   if (config.auth?.requireAuthForApi) {
     app.use(`${apiPath}/*`, bearerTokenMiddleware({ storage: deps.storage }));
