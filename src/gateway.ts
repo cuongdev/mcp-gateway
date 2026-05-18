@@ -22,11 +22,14 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import type { GatewayConfig } from "./config/schema.js";
 import type { GatewayVariables } from "./middleware/types.js";
+import type { StorageAdapter } from "./storage/adapter.js";
 import { GatewayError } from "./types/errors.js";
 import { buildMiddlewarePipeline } from "./middleware/index.js";
 import { ToolRegistry } from "./registry/tool.registry.js";
 import { ToolGroupManager } from "./registry/tool.groups.js";
 import { SessionManager } from "./session/session.manager.js";
+import { PolicyEngine } from "./middleware/authz/policy.engine.js";
+import { AuditLogger } from "./middleware/audit/audit.logger.js";
 import { createMCPRoutes } from "./routes/mcp.routes.js";
 import { createAdminRoutes } from "./routes/admin.routes.js";
 import { createAuthRoutes } from "./routes/auth.routes.js";
@@ -40,21 +43,33 @@ const log = logger.child({ component: "gateway" });
 export class Gateway {
   private app: Hono<{ Variables: GatewayVariables }>;
   private config: GatewayConfig;
+  private storage: StorageAdapter;
   private server: ReturnType<typeof serve> | null = null;
 
   // ── Core services ──────────────────────────────────
   private toolRegistry: ToolRegistry;
   private toolGroups: ToolGroupManager;
   private sessionManager: SessionManager;
+  private policyEngine: PolicyEngine;
+  private auditLogger: AuditLogger;
 
-  constructor(config: GatewayConfig) {
+  constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
+    this.storage = storage;
     this.app = new Hono<{ Variables: GatewayVariables }>();
 
-    // Initialize core services
-    this.toolRegistry = new ToolRegistry();
-    this.toolGroups = new ToolGroupManager(this.toolRegistry);
+    // Initialize core services backed by storage
+    this.toolRegistry = new ToolRegistry(storage);
+    this.toolGroups = new ToolGroupManager(storage, this.toolRegistry);
     this.sessionManager = new SessionManager();
+    this.policyEngine = new PolicyEngine({
+      storage,
+      modelFile: config.authorization.modelFile,
+    });
+    this.auditLogger = new AuditLogger({
+      storage,
+      config: config.audit,
+    });
 
     this.setupErrorHandler();
     this.setupMiddleware();
@@ -82,7 +97,7 @@ export class Gateway {
   }
 
   private setupMiddleware() {
-    buildMiddlewarePipeline(this.app, this.config);
+    buildMiddlewarePipeline(this.app, this.config, { storage: this.storage });
   }
 
   private setupRoutes() {
@@ -107,6 +122,7 @@ export class Gateway {
     // ── Admin REST API (for developers) ──────────────
     const adminRoutes = createAdminRoutes({
       config: this.config,
+      storage: this.storage,
       toolRegistry: this.toolRegistry,
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
@@ -157,17 +173,19 @@ export class Gateway {
 
   /**
    * Start the gateway.
-   * 1. Register servers from config
-   * 2. Discover tools from each server
-   * 3. Create pre-configured tool groups
-   * 4. Start HTTP server
+   * 1. Hydrate tool registry, tool groups, sessions from storage
+   * 2. Load authorization policies from storage
+   * 3. Start HTTP server
+   *
+   * NOTE: Upstream servers and tool groups now live in the database
+   * (managed via the Admin API / CLI), not in static config files.
    */
   async start(): Promise<void> {
-    // Register upstream servers from config
-    await this.registerConfigServers();
-
-    // Create tool groups from config
-    this.createConfigGroups();
+    // Hydrate in-memory state from storage
+    await this.toolRegistry.load();
+    await this.toolGroups.load();
+    await this.sessionManager.loadFromStorage(this.storage);
+    await this.policyEngine.load();
 
     // Start HTTP server
     const { port, host } = this.config.gateway;
@@ -178,7 +196,8 @@ export class Gateway {
       hostname: host,
     });
 
-    const serverCount = this.config.servers.length;
+    const serverRows = await this.storage.servers.list();
+    const serverCount = serverRows.length;
     const toolCount = this.toolRegistry.size;
     const groupCount = this.toolGroups.list().length;
 
@@ -211,57 +230,6 @@ export class Gateway {
   }
 
   /**
-   * Register upstream MCP servers from config and discover their tools.
-   */
-  private async registerConfigServers(): Promise<void> {
-    for (const serverConfig of this.config.servers) {
-      const { name, transport, autoDiscover } = serverConfig;
-
-      // Register session
-      this.sessionManager.register(name, transport);
-
-      // Auto-discover tools
-      if (autoDiscover && transport.type !== "stdio") {
-        try {
-          const tools = await this.sessionManager.discoverTools(name);
-          this.toolRegistry.registerServerTools(name, tools);
-
-          log.info(
-            { server: name, tools: tools.length },
-            "Discovered tools from server"
-          );
-        } catch (err) {
-          log.warn(
-            { server: name, err: err instanceof Error ? err.message : String(err) },
-            "Failed to discover tools (server may be offline)"
-          );
-        }
-      } else {
-        log.info({ server: name, transport: transport.type }, "Server registered (manual tool sync)");
-      }
-    }
-  }
-
-  /**
-   * Create pre-configured tool groups from config.
-   */
-  private createConfigGroups(): void {
-    for (const groupConfig of this.config.groups) {
-      try {
-        this.toolGroups.create(groupConfig.name, groupConfig.tools, {
-          description: groupConfig.description,
-          allowedRoles: groupConfig.allowedRoles,
-        });
-      } catch (err) {
-        log.warn(
-          { group: groupConfig.name, err: err instanceof Error ? err.message : String(err) },
-          "Failed to create tool group from config"
-        );
-      }
-    }
-  }
-
-  /**
    * Graceful shutdown.
    */
   async stop(): Promise<void> {
@@ -282,4 +250,7 @@ export class Gateway {
   getToolRegistry() { return this.toolRegistry; }
   getToolGroups() { return this.toolGroups; }
   getSessionManager() { return this.sessionManager; }
+  getPolicyEngine() { return this.policyEngine; }
+  getAuditLogger() { return this.auditLogger; }
+  getStorage() { return this.storage; }
 }

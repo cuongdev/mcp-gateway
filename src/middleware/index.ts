@@ -141,7 +141,7 @@ export function buildMiddlewarePipeline(
 
   // ── 7. Audit — MCP routes ─────────────────────────
   if (config.audit?.enabled) {
-    const auditMiddleware = createAuditMiddleware(config.audit);
+    const auditMiddleware = createAuditMiddleware(config.audit, deps.storage);
 
     app.use(`${mcpPath}/*`, auditMiddleware);
     app.use(`${mcpPath}`, auditMiddleware);

@@ -7,6 +7,7 @@ import type { MiddlewareHandler } from "hono";
 import type { AuditConfig } from "../../config/schema.js";
 import type { AuditEntry } from "../../types/gateway.js";
 import type { GatewayVariables } from "../types.js";
+import type { StorageAdapter } from "../../storage/adapter.js";
 import { AuditLogger } from "./audit.logger.js";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../../utils/logger.js";
@@ -18,9 +19,10 @@ const log = logger.child({ component: "audit" });
  * Captures request details, authorization decisions, and response outcomes.
  */
 export function createAuditMiddleware(
-  config: AuditConfig
+  config: AuditConfig,
+  storage: StorageAdapter,
 ): MiddlewareHandler<{ Variables: GatewayVariables }> {
-  const auditLogger = new AuditLogger(config);
+  const auditLogger = new AuditLogger({ storage, config });
 
   return async (c, next) => {
     const startTime = performance.now();
