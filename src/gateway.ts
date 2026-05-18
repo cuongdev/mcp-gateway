@@ -44,6 +44,9 @@ import { cacheMiddleware } from "./middleware/cache/cache.middleware.js";
 import { createCacheRoutes } from "./routes/admin/cache.routes.js";
 import { createRateLimitRoutes } from "./routes/admin/rate-limit.routes.js";
 import { createQuotaRoutes } from "./routes/admin/quota.routes.js";
+import { ApprovalService } from "./approval/index.js";
+import { approvalGateMiddleware } from "./middleware/approval/approval-gate.middleware.js";
+import { createApprovalsRoutes } from "./routes/admin/approvals.routes.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 
@@ -69,6 +72,7 @@ export class Gateway {
   private quotaService?: QuotaService;
   private quotaSweepInterval?: ReturnType<typeof setInterval>;
   private toolCache?: ToolCache;
+  private approvalService?: ApprovalService;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -253,6 +257,23 @@ export class Gateway {
       // Mount the cache admin sub-routes at /api/cache.
       this.app.route(`${apiPath}/cache`, createCacheRoutes({ cache: this.toolCache }));
       log.info({ path: mcpPath, backend: this.config.cache.backend }, "Registered: Cache middleware on MCP path");
+    }
+
+    // Mount approval-gate middleware on MCP routes (after cache).
+    if (this.config.approval.enabled) {
+      this.approvalService = new ApprovalService(this.storage, this.config.approval);
+      const mcpPath = this.config.gateway.mcpPath;
+      const apiPath = this.config.gateway.apiPath;
+      this.app.use(`${mcpPath}/*`, approvalGateMiddleware({
+        approvalService: this.approvalService,
+        toolRegistry: this.toolRegistry,
+      }));
+      this.app.use(mcpPath, approvalGateMiddleware({
+        approvalService: this.approvalService,
+        toolRegistry: this.toolRegistry,
+      }));
+      this.app.route(`${apiPath}/approvals`, createApprovalsRoutes({ approvalService: this.approvalService }));
+      log.info({ path: mcpPath }, "Registered: Approval-gate middleware on MCP path");
     }
 
     // Mount rate-limit status admin endpoint at /api/rate-limit.

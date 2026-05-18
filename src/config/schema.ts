@@ -220,6 +220,15 @@ const CacheSchema = z.object({
   defaultTtlSec: z.number().int().positive().default(60),
 }).default({});
 
+// ── Approval Schema ───────────────────────────────────
+
+const ApprovalSchema = z.object({
+  enabled: z.boolean().default(false),
+  defaultTtlSec: z.number().int().positive().default(300),
+  approverRoles: z.array(z.string()).default(['admin']),
+  tokenSecret: z.string().min(32).optional(),
+}).default({});
+
 // ── Tracing Schema ────────────────────────────────────
 
 const TracingSchema = z.object({
@@ -314,6 +323,8 @@ export const GatewayConfigSchema = z.object({
 
   cache: CacheSchema,
 
+  approval: ApprovalSchema,
+
   tracing: TracingSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
@@ -330,6 +341,13 @@ export const GatewayConfigSchema = z.object({
       path: ["auth", "sessionCookieSecret"],
       message:
         "auth.sessionCookieSecret is required when oidcProviders are configured (P2 unification)",
+    });
+  }
+  if (cfg.approval.enabled && !cfg.approval.tokenSecret) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["approval", "tokenSecret"],
+      message: "approval.tokenSecret (>=32 chars) required when approval.enabled",
     });
   }
 });
@@ -351,4 +369,5 @@ export type AuthConfig = z.infer<typeof AuthSchema>;
 export type RateLimitConfig = z.infer<typeof RateLimitSchema>;
 export type QuotaConfig = z.infer<typeof QuotaSchema>;
 export type CacheConfig = z.infer<typeof CacheSchema>;
+export type ApprovalConfig = z.infer<typeof ApprovalSchema>;
 export type TracingConfig = z.infer<typeof TracingSchema>;
