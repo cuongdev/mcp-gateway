@@ -30,7 +30,15 @@ export interface HttpTransportConfig {
   url: string;
   /** Optional bearer token for upstream auth */
   bearerToken?: string;
-  timeout: number;
+  timeout?: number;
+  /**
+   * Upstream MCP session mode (Streamable HTTP only).
+   *   "stateful"  — persist `Mcp-Session-Id` across requests (default)
+   *   "stateless" — never read or send the upstream session header
+   */
+  session_mode?: "stateful" | "stateless";
+  /** Extra HTTP headers forwarded to the upstream on every request */
+  headers?: Record<string, string>;
 }
 
 export interface StdioTransportConfig {
@@ -184,14 +192,16 @@ export class SessionManager {
     if (!session) return;
 
     if (session.type === "http") {
+      const sessionMode = session.config.session_mode ?? "stateful";
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
+        ...(session.config.headers ?? {}),
       };
       if (session.config.bearerToken) {
         headers["Authorization"] = `Bearer ${session.config.bearerToken}`;
       }
-      if (session.mcpSessionId) {
+      if (sessionMode !== "stateless" && session.mcpSessionId) {
         headers["Mcp-Session-Id"] = session.mcpSessionId;
       }
       // Fire and forget — ignore errors
@@ -271,13 +281,20 @@ export class SessionManager {
     request: JsonRpcRequest,
     timeoutMs?: number
   ): Promise<JsonRpcResponse> {
-    const timeout = timeoutMs ?? session.config.timeout;
+    const timeout = timeoutMs ?? session.config.timeout ?? 30000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
 
+    const sessionMode = session.config.session_mode ?? "stateful";
+
+    // Build headers. Ordering matters:
+    //   1. Base content/accept (cannot be overridden by user)
+    //   2. User-supplied upstream headers
+    //   3. Computed auth + session id (cannot be overridden by user)
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
+      ...(session.config.headers ?? {}),
     };
 
     // Add bearer token if configured
@@ -285,8 +302,8 @@ export class SessionManager {
       headers["Authorization"] = `Bearer ${session.config.bearerToken}`;
     }
 
-    // Add MCP session ID if we have one
-    if (session.mcpSessionId) {
+    // Add MCP session ID only in stateful mode
+    if (sessionMode !== "stateless" && session.mcpSessionId) {
       headers["Mcp-Session-Id"] = session.mcpSessionId;
     }
 
@@ -307,10 +324,12 @@ export class SessionManager {
         );
       }
 
-      // Capture MCP session ID from response
-      const newSessionId = response.headers.get("mcp-session-id");
-      if (newSessionId) {
-        session.mcpSessionId = newSessionId;
+      // Capture MCP session ID from response (stateful only)
+      if (sessionMode !== "stateless") {
+        const newSessionId = response.headers.get("mcp-session-id");
+        if (newSessionId) {
+          session.mcpSessionId = newSessionId;
+        }
       }
 
       // Check Content-Type — server may respond with JSON or SSE stream

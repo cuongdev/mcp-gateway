@@ -16,6 +16,14 @@ const HttpTransportSchema = z.object({
   url: z.string().url(),
   bearerToken: z.string().optional(),
   timeout: z.number().positive().default(30000),
+  /**
+   * Upstream MCP session mode (Streamable HTTP only).
+   *   "stateful"  — persist `Mcp-Session-Id` across requests (default)
+   *   "stateless" — never read or send the upstream session header
+   */
+  session_mode: z.enum(["stateful", "stateless"]).default("stateful"),
+  /** Extra HTTP headers forwarded to the upstream on every request */
+  headers: z.record(z.string()).default({}),
 });
 
 const StdioTransportSchema = z.object({
@@ -176,6 +184,13 @@ export const SessionConfigSchema = z.object({
   secure: z.boolean().default(false),
   /** SameSite cookie policy */
   sameSite: z.enum(["strict", "lax", "none"]).default("lax"),
+  /**
+   * Idle timeout (in seconds) for upstream stateful sessions.
+   * After this many seconds without activity, the session is reclaimed
+   * (e.g. STDIO child processes killed, HTTP `Mcp-Session-Id` cleared).
+   * Default: 600s (10 minutes).
+   */
+  idleTimeoutSec: z.number().int().positive().default(600),
 });
 
 // ── Main Gateway Config ───────────────────────────────
