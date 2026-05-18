@@ -101,4 +101,32 @@ describe('approval flow', () => {
     });
     expect(r3.status).toBe(409);
   });
+
+  it('post-approval execution: caller reissues call with X-MCP-Approval-Id header → upstream called', async () => {
+    const r1 = await env.app.request('/mcp', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.callerRaw}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: 'tools/call', params: { name: 'db__delete', arguments: { id: 1 } } }),
+    });
+    const id = ((await r1.json()) as { error: { data: { approval_id: string } } }).error.data.approval_id;
+
+    await env.app.request(`/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.adminRaw}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    const r3 = await env.app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.callerRaw}`,
+        'Content-Type': 'application/json',
+        'X-MCP-Approval-Id': id,
+      },
+      body: JSON.stringify({ method: 'tools/call', params: { name: 'db__delete', arguments: { id: 1 } } }),
+    });
+    expect(r3.status).toBe(200);
+    const body = await r3.json() as { result: string };
+    expect(body.result).toBe('executed');
+  });
 });
