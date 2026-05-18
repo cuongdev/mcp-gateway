@@ -28,6 +28,7 @@ import type { ToolRegistry, RegisteredTool } from "../registry/tool.registry.js"
 import type { ToolGroupManager } from "../registry/tool.groups.js";
 import type { PromptRegistry } from "../registry/prompt.registry.js";
 import type { SessionManager } from "../session/session.manager.js";
+import { withSpan } from "../observability/spans.js";
 import { logger } from "../utils/logger.js";
 
 /** Map a RegisteredTool to the MCP-protocol tool shape. */
@@ -214,58 +215,65 @@ async function handleMCPRequest(
 
     case MCP_METHODS.TOOLS_CALL: {
       const canonicalName = params?.name as string;
-      if (!canonicalName) {
-        return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing tool name");
-      }
-
-      // If in a group, verify the tool is in the group
-      if (groupName) {
-        const allowed = groups.resolveTools(groupName);
-        if (!allowed.includes(canonicalName)) {
-          return createErrorResponse(
-            id,
-            MCP_ERROR_CODES.METHOD_NOT_FOUND,
-            `Tool '${canonicalName}' is not part of group '${groupName}'`
-          );
-        }
-      }
-
-      // Resolve canonical name → server + original tool name
-      const resolved = registry.get(canonicalName);
-      if (!resolved) {
-        return createErrorResponse(
-          id,
-          MCP_ERROR_CODES.METHOD_NOT_FOUND,
-          `Tool not found: ${canonicalName}`
-        );
-      }
-
-      context.targetServer = resolved.serverName;
-
-      // Rewrite the request with the original tool name
-      const upstreamRequest: JsonRpcRequest = {
-        jsonrpc: "2.0",
-        id,
-        method: MCP_METHODS.TOOLS_CALL,
-        params: {
-          name: resolved.originalName,
-          arguments: params?.arguments,
-        },
-      };
-
-      log.debug(
+      return withSpan(
+        "mcp.tools.call",
         {
-          canonical: canonicalName,
-          server: resolved.serverName,
-          tool: resolved.originalName,
+          "mcp.tool": canonicalName,
+          "mcp.id": String(id ?? ""),
+          "mcp.group": groupName,
         },
-        "Routing tool call"
-      );
+        async () => {
+          if (!canonicalName) {
+            return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing tool name");
+          }
 
-      // Forward via session manager
-      return sessionManager.send(
-        resolved.serverName,
-        upstreamRequest
+          // If in a group, verify the tool is in the group
+          if (groupName) {
+            const allowed = groups.resolveTools(groupName);
+            if (!allowed.includes(canonicalName)) {
+              return createErrorResponse(
+                id,
+                MCP_ERROR_CODES.METHOD_NOT_FOUND,
+                `Tool '${canonicalName}' is not part of group '${groupName}'`
+              );
+            }
+          }
+
+          // Resolve canonical name → server + original tool name
+          const resolved = registry.get(canonicalName);
+          if (!resolved) {
+            return createErrorResponse(
+              id,
+              MCP_ERROR_CODES.METHOD_NOT_FOUND,
+              `Tool not found: ${canonicalName}`
+            );
+          }
+
+          context.targetServer = resolved.serverName;
+
+          // Rewrite the request with the original tool name
+          const upstreamRequest: JsonRpcRequest = {
+            jsonrpc: "2.0",
+            id,
+            method: MCP_METHODS.TOOLS_CALL,
+            params: {
+              name: resolved.originalName,
+              arguments: params?.arguments,
+            },
+          };
+
+          log.debug(
+            {
+              canonical: canonicalName,
+              server: resolved.serverName,
+              tool: resolved.originalName,
+            },
+            "Routing tool call"
+          );
+
+          // Forward via session manager
+          return sessionManager.send(resolved.serverName, upstreamRequest);
+        },
       );
     }
 

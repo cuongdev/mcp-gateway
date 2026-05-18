@@ -220,6 +220,15 @@ const CacheSchema = z.object({
   defaultTtlSec: z.number().int().positive().default(60),
 }).default({});
 
+// ── Tracing Schema ────────────────────────────────────
+
+const TracingSchema = z.object({
+  enabled: z.boolean().default(false),
+  serviceName: z.string().default('mcp-gateway'),
+  otlpEndpoint: z.string().nullable().default(null),
+  samplingRatio: z.number().min(0).max(1).default(0.1),
+}).default({});
+
 // ── Session Schema ────────────────────────────────────
 
 export const SessionConfigSchema = z.object({
@@ -304,6 +313,8 @@ export const GatewayConfigSchema = z.object({
   quota: QuotaSchema,
 
   cache: CacheSchema,
+
+  tracing: TracingSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -340,3 +351,4 @@ export type AuthConfig = z.infer<typeof AuthSchema>;
 export type RateLimitConfig = z.infer<typeof RateLimitSchema>;
 export type QuotaConfig = z.infer<typeof QuotaSchema>;
 export type CacheConfig = z.infer<typeof CacheSchema>;
+export type TracingConfig = z.infer<typeof TracingSchema>;

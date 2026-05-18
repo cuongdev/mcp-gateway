@@ -17,6 +17,7 @@ import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
+import { withSpan, currentTraceparent } from "../observability/spans.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "session-manager" });
@@ -373,77 +374,92 @@ export class SessionManager {
     timeoutMs?: number
   ): Promise<JsonRpcResponse> {
     const timeout = timeoutMs ?? session.config.timeout ?? 30000;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-
     const sessionMode = session.config.session_mode ?? "stateful";
 
-    // Build headers. Ordering matters:
-    //   1. Base content/accept (cannot be overridden by user)
-    //   2. User-supplied upstream headers
-    //   3. Computed auth + session id (cannot be overridden by user)
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      ...(session.config.headers ?? {}),
-    };
+    return withSpan(
+      "gateway.session.send",
+      {
+        "server.name": serverName,
+        transport: "streamable-http",
+        "mcp.method": request.method,
+        "session.mode": sessionMode,
+      },
+      async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
 
-    // Add bearer token if configured
-    if (session.config.bearerToken) {
-      headers["Authorization"] = `Bearer ${session.config.bearerToken}`;
-    }
+        // Build headers. Ordering matters:
+        //   1. Base content/accept (cannot be overridden by user)
+        //   2. User-supplied upstream headers
+        //   3. Computed auth + session id (cannot be overridden by user)
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          ...(session.config.headers ?? {}),
+        };
 
-    // Add MCP session ID only in stateful mode
-    if (sessionMode !== "stateless" && session.mcpSessionId) {
-      headers["Mcp-Session-Id"] = session.mcpSessionId;
-    }
-
-    try {
-      const response = await fetch(session.config.url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timer);
-
-      if (!response.ok) {
-        throw new UpstreamConnectionError(
-          serverName,
-          `HTTP ${response.status}: ${response.statusText}`
-        );
-      }
-
-      // Capture MCP session ID from response (stateful only)
-      if (sessionMode !== "stateless") {
-        const newSessionId = response.headers.get("mcp-session-id");
-        if (newSessionId) {
-          session.mcpSessionId = newSessionId;
+        // Add bearer token if configured
+        if (session.config.bearerToken) {
+          headers["Authorization"] = `Bearer ${session.config.bearerToken}`;
         }
-      }
 
-      // Check Content-Type — server may respond with JSON or SSE stream
-      const contentType = response.headers.get("content-type") ?? "";
+        // Add MCP session ID only in stateful mode
+        if (sessionMode !== "stateless" && session.mcpSessionId) {
+          headers["Mcp-Session-Id"] = session.mcpSessionId;
+        }
 
-      if (contentType.includes("text/event-stream")) {
-        // Streamable HTTP: response is an SSE stream
-        // Parse events until we get the JSON-RPC response matching our request ID
-        return await this.parseSseResponse(serverName, response, request.id);
-      }
+        // Forward W3C traceparent for distributed tracing across gateway→upstream
+        const tp = currentTraceparent();
+        if (tp) headers["traceparent"] = tp;
 
-      return (await response.json()) as JsonRpcResponse;
-    } catch (err) {
-      clearTimeout(timer);
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new UpstreamTimeoutError(serverName, timeout);
-      }
-      if (err instanceof UpstreamConnectionError) throw err;
-      throw new UpstreamConnectionError(
-        serverName,
-        err instanceof Error ? err.message : "Unknown error"
-      );
-    }
+        try {
+          const response = await fetch(session.config.url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(request),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timer);
+
+          if (!response.ok) {
+            throw new UpstreamConnectionError(
+              serverName,
+              `HTTP ${response.status}: ${response.statusText}`
+            );
+          }
+
+          // Capture MCP session ID from response (stateful only)
+          if (sessionMode !== "stateless") {
+            const newSessionId = response.headers.get("mcp-session-id");
+            if (newSessionId) {
+              session.mcpSessionId = newSessionId;
+            }
+          }
+
+          // Check Content-Type — server may respond with JSON or SSE stream
+          const contentType = response.headers.get("content-type") ?? "";
+
+          if (contentType.includes("text/event-stream")) {
+            // Streamable HTTP: response is an SSE stream
+            // Parse events until we get the JSON-RPC response matching our request ID
+            return await this.parseSseResponse(serverName, response, request.id);
+          }
+
+          return (await response.json()) as JsonRpcResponse;
+        } catch (err) {
+          clearTimeout(timer);
+          if (err instanceof Error && err.name === "AbortError") {
+            throw new UpstreamTimeoutError(serverName, timeout);
+          }
+          if (err instanceof UpstreamConnectionError) throw err;
+          throw new UpstreamConnectionError(
+            serverName,
+            err instanceof Error ? err.message : "Unknown error"
+          );
+        }
+      },
+    );
   }
 
   /**

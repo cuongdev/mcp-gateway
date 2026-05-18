@@ -191,6 +191,15 @@ function mergeEnvVars(config: Record<string, unknown>): Record<string, unknown> 
   if (env["METRICS_ENABLED"]) set(merged, "monitoring.metricsEnabled", env["METRICS_ENABLED"] === "true");
   if (env["METRICS_PORT"]) set(merged, "monitoring.metricsPort", parseInt(env["METRICS_PORT"]!));
 
+  // Tracing
+  if (env["OTEL_EXPORTER_OTLP_ENDPOINT"]) {
+    set(merged, "tracing.otlpEndpoint", env["OTEL_EXPORTER_OTLP_ENDPOINT"]);
+  }
+  if (env["OTEL_TRACES_SAMPLER_ARG"]) {
+    const ratio = parseFloat(env["OTEL_TRACES_SAMPLER_ARG"]!);
+    if (!Number.isNaN(ratio)) set(merged, "tracing.samplingRatio", ratio);
+  }
+
   return merged;
 }
 

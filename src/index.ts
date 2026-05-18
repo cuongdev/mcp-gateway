@@ -16,6 +16,7 @@
 import { loadConfig } from "./config/index.js";
 import { Gateway } from "./gateway.js";
 import { createStorage } from "./storage/index.js";
+import { initTracing, shutdownTracing } from "./observability/tracing.js";
 import { logger } from "./utils/logger.js";
 
 const log = logger.child({ component: "main" });
@@ -26,6 +27,11 @@ async function main() {
   // Load configuration
   const configPath = process.argv[2] || process.env.GATEWAY_CONFIG;
   const config = loadConfig(configPath);
+
+  // Initialize OpenTelemetry BEFORE constructing the gateway so that
+  // auto-instrumentations (http, fetch, etc.) can patch their targets
+  // before any of the gateway's modules import them.
+  await initTracing(config);
 
   // Initialize storage adapter before constructing the gateway so that
   // tool registry / group manager / policy engine / audit logger / bearer
@@ -46,6 +52,7 @@ async function main() {
     log.info({ signal }, "Received shutdown signal");
     await gateway.stop();
     await storage.close();
+    await shutdownTracing();
     process.exit(0);
   };
 
