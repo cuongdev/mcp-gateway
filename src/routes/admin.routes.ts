@@ -52,6 +52,7 @@ import {
 import { logger } from "../utils/logger.js";
 import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
 import { createUsersRoutes } from "./admin/users.routes.js";
+import { createTokensRoutes } from "./admin/tokens.routes.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -410,6 +411,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   // ═══════════════════════════════════════════════════════
 
   app.route("/mcp-clients", createMcpClientsRoutes({ storage }));
+  app.route("/users/me/tokens", createTokensRoutes({ storage }));
   app.route("/users", createUsersRoutes({ storage }));
 
   return app;
