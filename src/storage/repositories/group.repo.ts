@@ -7,6 +7,8 @@ export interface GroupRow {
   allowedRoles: string[];
   tools: string[];
   createdAt: number;
+  includedServers?: string[];
+  excludedTools?: string[];
 }
 
 export interface NewGroup {
@@ -51,6 +53,14 @@ export class GroupRepo {
       sql: 'SELECT canonical_name FROM group_tools WHERE group_name = ? ORDER BY canonical_name',
       args: [name],
     });
+    const included = await this.client.execute({
+      sql: 'SELECT server_name FROM group_included_servers WHERE group_name = ? ORDER BY server_name',
+      args: [name],
+    });
+    const excluded = await this.client.execute({
+      sql: 'SELECT canonical_name FROM group_excluded_tools WHERE group_name = ? ORDER BY canonical_name',
+      args: [name],
+    });
     return {
       name: r.rows[0].name as string,
       description: (r.rows[0].description as string | null) ?? '',
@@ -58,6 +68,8 @@ export class GroupRepo {
       allowedRoles: JSON.parse(r.rows[0].allowed_roles as string),
       tools: tools.rows.map((t) => t.canonical_name as string),
       createdAt: Number(r.rows[0].created_at),
+      includedServers: included.rows.map((s) => s.server_name as string),
+      excludedTools: excluded.rows.map((t) => t.canonical_name as string),
     };
   }
 
@@ -76,6 +88,26 @@ export class GroupRepo {
     for (const t of tools) {
       await this.client.execute({
         sql: 'INSERT INTO group_tools(group_name, canonical_name) VALUES (?, ?)',
+        args: [name, t],
+      });
+    }
+  }
+
+  async setIncludedServers(name: string, servers: string[]): Promise<void> {
+    await this.client.execute({ sql: 'DELETE FROM group_included_servers WHERE group_name = ?', args: [name] });
+    for (const s of servers) {
+      await this.client.execute({
+        sql: 'INSERT INTO group_included_servers(group_name, server_name) VALUES (?, ?)',
+        args: [name, s],
+      });
+    }
+  }
+
+  async setExcludedTools(name: string, tools: string[]): Promise<void> {
+    await this.client.execute({ sql: 'DELETE FROM group_excluded_tools WHERE group_name = ?', args: [name] });
+    for (const t of tools) {
+      await this.client.execute({
+        sql: 'INSERT INTO group_excluded_tools(group_name, canonical_name) VALUES (?, ?)',
         args: [name, t],
       });
     }

@@ -47,3 +47,39 @@ describe('GroupRepo', () => {
     expect(await storage.groups.findByName('g1')).toBeNull();
   });
 });
+
+describe('GroupRepo includes/excludes', () => {
+  let storage: SqliteAdapter;
+  beforeEach(async () => {
+    storage = await makeStorage();
+    await storage.servers.upsert({
+      name: 'db', transportType: 'streamable-http', transportConfig: { url: 'u' },
+    });
+    await storage.servers.upsert({
+      name: 'fs', transportType: 'stdio', transportConfig: { command: 'n' },
+    });
+  });
+  afterEach(async () => { await storage.close(); });
+
+  it('setIncludedServers stores and findByName returns them', async () => {
+    await storage.groups.create({ name: 'g', description: '', allowedRoles: [], tools: [] });
+    await storage.groups.setIncludedServers('g', ['db', 'fs']);
+    const g = await storage.groups.findByName('g');
+    expect(g?.includedServers?.sort()).toEqual(['db', 'fs']);
+  });
+
+  it('setExcludedTools stores and findByName returns them', async () => {
+    await storage.groups.create({ name: 'g', description: '', allowedRoles: [], tools: [] });
+    await storage.groups.setExcludedTools('g', ['db__delete', 'fs__write']);
+    const g = await storage.groups.findByName('g');
+    expect(g?.excludedTools?.sort()).toEqual(['db__delete', 'fs__write']);
+  });
+
+  it('cascade clears group_included_servers when group deleted', async () => {
+    await storage.groups.create({ name: 'g', description: '', allowedRoles: [], tools: [] });
+    await storage.groups.setIncludedServers('g', ['db']);
+    await storage.groups.deleteByName('g');
+    const r = await storage.transaction(async (tx) => tx.query('SELECT * FROM group_included_servers'));
+    expect(r.length).toBe(0);
+  });
+});
