@@ -119,3 +119,14 @@ Also: `GET /api/servers` currently lists only servers whose tools have been disc
 - Postgres adapter via `STORAGE_DRIVER=postgres DATABASE_URL=postgres://...`
 - Docker variant: `Dockerfile.stdio` with Node + uv + npx; `docker-compose.prod.yml` with Postgres
 - OIDC callback unification with session cookies is partially shipped (cookie middleware + signing helper); full OIDC-callback rewiring deferred — see TODO in `src/middleware/auth/oidc.middleware.ts`.
+
+## P2 (v0.4.0-p2) additions
+
+- **OIDC ↔ Principal unified** — OAuth2 callbacks now upsert a User principal and issue a `{ pid }` session cookie read by the P1 `sessionCookieMiddleware`. `createAuthMiddleware`/`resolveUser` retired.
+- **Rate limiting** — per-Principal × per-tool sliding window. Memory (single-instance) or Redis (multi-instance) backend. `429 + Retry-After + X-RateLimit-*` on overflow.
+- **Quota** — daily + monthly counters per Principal with overrides and midnight-UTC reset.
+- **Tool-call caching** — opt-in per tool via `mcp-gateway tool flag <name> --cacheable --ttl 60`. Memory/SQL/Redis backends. `X-MCP-Cache: hit|miss` header. Auto-invalidates on tool disable.
+- **OpenTelemetry** — OTLP exporter + `mcp.tools.call` and `gateway.session.send` spans + `traceparent` forwarding. Off by default; set `tracing.enabled=true`.
+- **New metrics** — `mcp_rate_limit_hits_total`, `mcp_quota_exceeded_total`, `mcp_cache_hits_total/misses_total`, `mcp_tool_call_duration_seconds`, `mcp_upstream_latency_seconds`.
+- **Breaking:** `auth.sessionCookieSecret` (≥32 chars) is now REQUIRED when any `oidcProviders` are configured.
+- **New env vars:** `REDIS_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`.
