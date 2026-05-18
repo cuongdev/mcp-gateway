@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import { registerMigrateCommands } from './commands/migrate.js';
 import { registerInitServerCommand } from './commands/init-server.js';
 import { registerSeedCommand } from './commands/seed.js';
+import { registerRegisterCommand } from './commands/register.js';
+import { registerDeregisterCommand } from './commands/deregister.js';
+import { registerListCommand } from './commands/list.js';
 
 async function main() {
   const program = new Command();
@@ -13,6 +16,9 @@ async function main() {
   registerMigrateCommands(program);
   registerInitServerCommand(program);
   registerSeedCommand(program);
+  registerRegisterCommand(program);
+  registerDeregisterCommand(program);
+  registerListCommand(program);
 
   await program.parseAsync(process.argv);
 }
