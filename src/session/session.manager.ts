@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
 import type { StorageAdapter } from "../storage/adapter.js";
+import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "session-manager" });
@@ -85,6 +86,23 @@ interface StdioSession {
 }
 
 type Session = HttpSession | StdioSession;
+
+// ── Prompt helpers ────────────────────────────────────
+
+/**
+ * Convert MCP `arguments` array to a JSON-schema-ish object.
+ * Arguments are an array of `{ name, description?, required? }`.
+ */
+function argsToJsonSchema(args: unknown): Record<string, unknown> {
+  if (!Array.isArray(args)) return { type: "object", properties: {} };
+  const properties: Record<string, { type: string; description?: string }> = {};
+  const required: string[] = [];
+  for (const a of args as Array<{ name: string; description?: string; required?: boolean }>) {
+    properties[a.name] = { type: "string", description: a.description };
+    if (a.required) required.push(a.name);
+  }
+  return { type: "object", properties, required };
+}
 
 // ── Session Manager ────────────────────────────────────
 
@@ -215,6 +233,34 @@ export class SessionManager {
     });
 
     return (toolsResponse.result as any)?.tools ?? [];
+  }
+
+  /**
+   * Send `prompts/list` to the upstream server and convert the MCP
+   * `arguments[]` shape to a JSON-schema-ish `argumentsSchema`.
+   *
+   * Returns an empty array if the server doesn't support prompts/list
+   * or if any error occurs.
+   */
+  async discoverPrompts(serverName: string): Promise<DiscoveredPrompt[]> {
+    const request: JsonRpcRequest = {
+      jsonrpc: "2.0",
+      id: `prompts-${serverName}-${Date.now()}`,
+      method: "prompts/list",
+    };
+    try {
+      const result = await this.send(serverName, request) as {
+        result?: { prompts?: Array<{ name: string; description?: string; arguments?: unknown }> };
+      };
+      const prompts = (result as any)?.result?.prompts ?? [];
+      return prompts.map((p: { name: string; description?: string; arguments?: unknown }) => ({
+        originalName: p.name,
+        description: p.description ?? "",
+        argumentsSchema: argsToJsonSchema(p.arguments),
+      }));
+    } catch {
+      return [];
+    }
   }
 
   /**

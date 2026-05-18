@@ -150,6 +150,26 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         "Server registered and tools discovered"
       );
 
+      // Discover prompts — swallow errors quietly (server may not support prompts/list)
+      try {
+        const prompts = await deps.sessionManager.discoverPrompts(body.name);
+        await deps.promptRegistry.registerServerPrompts(
+          body.name,
+          prompts.map((p) => ({
+            name: p.originalName,
+            description: p.description,
+            argumentsSchema: p.argumentsSchema,
+          })),
+        );
+        log.info(
+          { server: body.name, promptCount: prompts.length },
+          "Prompts discovered"
+        );
+      } catch {
+        // warn-level noop — many servers don't support prompts/list
+        log.warn({ server: body.name }, "Prompt discovery failed (server may not support prompts/list)");
+      }
+
       return c.json({
         server: body.name,
         tools: tools.map((t: any) => `${body.name}__${t.name}`),
