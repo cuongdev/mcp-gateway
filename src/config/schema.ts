@@ -266,6 +266,15 @@ const TracingSchema = z.object({
   samplingRatio: z.number().min(0).max(1).default(0.1),
 }).default({});
 
+// ── Tenancy Schema ────────────────────────────────────
+
+const TenancySchema = z.object({
+  enabled: z.boolean().default(false),
+  headerName: z.string().default('X-Tenant'),
+  defaultSlug: z.string().default('default'),
+  suspendedHttpStatus: z.number().int().min(400).max(599).default(402),
+}).default({});
+
 // ── OpenAPI Schema ───────────────────────────────────
 
 const OpenApiConfigSchema = z.object({
@@ -367,6 +376,8 @@ export const GatewayConfigSchema = z.object({
   tracing: TracingSchema,
 
   openapi: OpenApiConfigSchema,
+
+  tenancy: TenancySchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -414,3 +425,4 @@ export type ApprovalConfig = z.infer<typeof ApprovalSchema>;
 export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
 export type TracingConfig = z.infer<typeof TracingSchema>;
 export type OpenApiConfig = z.infer<typeof OpenApiConfigSchema>;
+export type TenancyConfig = z.infer<typeof TenancySchema>;

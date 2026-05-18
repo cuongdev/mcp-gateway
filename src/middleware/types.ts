@@ -5,6 +5,7 @@
 import type { Context } from "hono";
 import type { GatewayContext, UserContext } from "../types/gateway.js";
 import type { Principal, AuthMethod } from "../identity/principal.js";
+import type { TenantRow } from "../storage/repositories/tenant.repo.js";
 
 /** Extended Hono context with gateway-specific data */
 export interface GatewayHonoContext extends Context {
@@ -17,6 +18,8 @@ export type GatewayVariables = {
   user: UserContext;
   principal: Principal;
   authMethod: AuthMethod;
+  tenantId: string;
+  tenant?: TenantRow;
 };
 
 /** Middleware metadata for registration and ordering */
