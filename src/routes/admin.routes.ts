@@ -51,6 +51,7 @@ import {
 } from "../middleware/authz/policy.engine.js";
 import { logger } from "../utils/logger.js";
 import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
+import { createUsersRoutes } from "./admin/users.routes.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -409,6 +410,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   // ═══════════════════════════════════════════════════════
 
   app.route("/mcp-clients", createMcpClientsRoutes({ storage }));
+  app.route("/users", createUsersRoutes({ storage }));
 
   return app;
 }
