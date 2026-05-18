@@ -47,6 +47,7 @@ import { createQuotaRoutes } from "./routes/admin/quota.routes.js";
 import { ApprovalService } from "./approval/index.js";
 import { approvalGateMiddleware } from "./middleware/approval/approval-gate.middleware.js";
 import { createApprovalsRoutes } from "./routes/admin/approvals.routes.js";
+import { createWebhooksRoutes } from "./routes/admin/webhooks.routes.js";
 import { WebhookDispatcher } from "./notify/webhook.dispatcher.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
@@ -270,12 +271,17 @@ export class Gateway {
       this.app.use(`${mcpPath}/*`, approvalGateMiddleware({
         approvalService: this.approvalService,
         toolRegistry: this.toolRegistry,
+        webhookDispatcher: this.webhookDispatcher,
       }));
       this.app.use(mcpPath, approvalGateMiddleware({
         approvalService: this.approvalService,
         toolRegistry: this.toolRegistry,
+        webhookDispatcher: this.webhookDispatcher,
       }));
-      this.app.route(`${apiPath}/approvals`, createApprovalsRoutes({ approvalService: this.approvalService }));
+      this.app.route(`${apiPath}/approvals`, createApprovalsRoutes({
+        approvalService: this.approvalService,
+        webhookDispatcher: this.webhookDispatcher,
+      }));
       this.approvalSweepInterval = setInterval(async () => {
         try { await this.approvalService!.expireOverdue(); } catch {}
       }, 60_000);
@@ -291,6 +297,9 @@ export class Gateway {
         { pollMs: this.config.webhooks.workerPollIntervalMs, concurrency: this.config.webhooks.workerConcurrency },
         "Registered: Webhook dispatcher worker",
       );
+      // Mount webhook admin routes.
+      this.app.route(`${this.config.gateway.apiPath}/webhooks`, createWebhooksRoutes({ storage: this.storage }));
+      log.info({ path: `${this.config.gateway.apiPath}/webhooks` }, "Registered: Webhook admin routes");
     }
 
     // Mount rate-limit status admin endpoint at /api/rate-limit.

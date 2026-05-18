@@ -20,6 +20,7 @@ import { registerCacheCommand } from './commands/cache.js';
 import { registerQuotaCommand } from './commands/quota.js';
 import { registerRateLimitCommand } from './commands/rate-limit.js';
 import { registerApprovalCommand } from './commands/approval.js';
+import { registerWebhookCommand } from './commands/webhook.js';
 
 async function main() {
   const program = new Command();
@@ -49,6 +50,7 @@ async function main() {
   registerQuotaCommand(program);
   registerRateLimitCommand(program);
   registerApprovalCommand(program);
+  registerWebhookCommand(program);
 
   await program.parseAsync(process.argv);
 }

@@ -13,9 +13,11 @@ import { z } from 'zod';
 import type { ApprovalService } from '../../approval/index.js';
 import type { Principal } from '../../identity/principal.js';
 import type { GatewayVariables } from '../../middleware/types.js';
+import type { WebhookDispatcher } from '../../notify/webhook.dispatcher.js';
 
 export interface ApprovalsRoutesDeps {
   approvalService: ApprovalService;
+  webhookDispatcher?: WebhookDispatcher;
 }
 
 export function createApprovalsRoutes(deps: ApprovalsRoutesDeps) {
@@ -46,6 +48,10 @@ export function createApprovalsRoutes(deps: ApprovalsRoutesDeps) {
       .parse(await c.req.json().catch(() => ({})));
     const ok = await deps.approvalService.approve(c.req.param('id'), principal.id, body.reason);
     if (!ok) return c.json({ error: { code: 'conflict', message: 'Not pending' } }, 409);
+    deps.webhookDispatcher?.emit('approval.approved', {
+      approval_id: c.req.param('id'),
+      approver_id: principal.id,
+    }).catch(() => {});
     return c.json({ ok: true });
   });
 
@@ -57,6 +63,10 @@ export function createApprovalsRoutes(deps: ApprovalsRoutesDeps) {
       .parse(await c.req.json().catch(() => ({})));
     const ok = await deps.approvalService.reject(c.req.param('id'), principal.id, body.reason);
     if (!ok) return c.json({ error: { code: 'conflict', message: 'Not pending' } }, 409);
+    deps.webhookDispatcher?.emit('approval.rejected', {
+      approval_id: c.req.param('id'),
+      approver_id: principal.id,
+    }).catch(() => {});
     return c.json({ ok: true });
   });
 

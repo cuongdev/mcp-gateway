@@ -13,10 +13,12 @@ import type { MiddlewareHandler } from 'hono';
 import type { ApprovalService } from '../../approval/index.js';
 import type { ToolRegistry } from '../../registry/tool.registry.js';
 import type { GatewayVariables } from '../types.js';
+import type { WebhookDispatcher } from '../../notify/webhook.dispatcher.js';
 
 export interface ApprovalGateOptions {
   approvalService: ApprovalService;
   toolRegistry: ToolRegistry;
+  webhookDispatcher?: WebhookDispatcher;
 }
 
 export function approvalGateMiddleware(opts: ApprovalGateOptions): MiddlewareHandler<{ Variables: GatewayVariables }> {
@@ -55,6 +57,12 @@ export function approvalGateMiddleware(opts: ApprovalGateOptions): MiddlewareHan
       tool: body.params.name,
       args: body.params.arguments,
     });
+
+    opts.webhookDispatcher?.emit('approval.requested', {
+      approval_id: approval.id,
+      tool: approval.tool,
+      principal_id: approval.principalId,
+    }).catch(() => {});
 
     return c.json(
       {
