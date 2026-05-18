@@ -50,6 +50,7 @@ import {
   addRoleForUser,
 } from "../middleware/authz/policy.engine.js";
 import { logger } from "../utils/logger.js";
+import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -402,6 +403,12 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     const added = await addRoleForUser(user, role);
     return c.json({ added });
   });
+
+  // ═══════════════════════════════════════════════════════
+  // MCP Client Management
+  // ═══════════════════════════════════════════════════════
+
+  app.route("/mcp-clients", createMcpClientsRoutes({ storage }));
 
   return app;
 }
