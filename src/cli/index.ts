@@ -1,5 +1,24 @@
-// Placeholder — full implementation lands in P0 Task 18.
-// This file exists so npm scripts and bin entry don't reference non-existent paths.
+import { Command } from 'commander';
+import { registerMigrateCommands } from './commands/migrate.js';
+import { registerInitServerCommand } from './commands/init-server.js';
+import { registerSeedCommand } from './commands/seed.js';
 
-console.error('mcp-gateway CLI not yet implemented in this build. See docs/superpowers/plans/2026-05-18-phase-0-foundation.md (Task 18).');
-process.exit(2);
+async function main() {
+  const program = new Command();
+  program
+    .name('mcp-gateway')
+    .description('MCP Gateway management CLI')
+    .version('0.2.0');
+
+  registerMigrateCommands(program);
+  registerInitServerCommand(program);
+  registerSeedCommand(program);
+
+  await program.parseAsync(process.argv);
+}
+
+main().catch((err) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(`\x1b[31m✗\x1b[0m ${msg}`);
+  process.exit(1);
+});
