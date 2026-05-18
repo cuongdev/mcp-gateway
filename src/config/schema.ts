@@ -229,6 +229,16 @@ const ApprovalSchema = z.object({
   tokenSecret: z.string().min(32).optional(),
 }).default({});
 
+// ── Webhook Schema ────────────────────────────────────
+
+const WebhookConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  workerPollIntervalMs: z.number().int().positive().default(2000),
+  workerConcurrency: z.number().int().positive().default(4),
+  maxAttempts: z.number().int().positive().default(5),
+  backoffMs: z.array(z.number().int().nonnegative()).default([1000, 5000, 30000, 120000, 600000]),
+}).default({});
+
 // ── Tracing Schema ────────────────────────────────────
 
 const TracingSchema = z.object({
@@ -325,6 +335,8 @@ export const GatewayConfigSchema = z.object({
 
   approval: ApprovalSchema,
 
+  webhooks: WebhookConfigSchema,
+
   tracing: TracingSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
@@ -370,4 +382,5 @@ export type RateLimitConfig = z.infer<typeof RateLimitSchema>;
 export type QuotaConfig = z.infer<typeof QuotaSchema>;
 export type CacheConfig = z.infer<typeof CacheSchema>;
 export type ApprovalConfig = z.infer<typeof ApprovalSchema>;
+export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
 export type TracingConfig = z.infer<typeof TracingSchema>;

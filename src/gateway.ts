@@ -47,6 +47,7 @@ import { createQuotaRoutes } from "./routes/admin/quota.routes.js";
 import { ApprovalService } from "./approval/index.js";
 import { approvalGateMiddleware } from "./middleware/approval/approval-gate.middleware.js";
 import { createApprovalsRoutes } from "./routes/admin/approvals.routes.js";
+import { WebhookDispatcher } from "./notify/webhook.dispatcher.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 
@@ -74,6 +75,7 @@ export class Gateway {
   private toolCache?: ToolCache;
   private approvalService?: ApprovalService;
   private approvalSweepInterval?: ReturnType<typeof setInterval>;
+  private webhookDispatcher?: WebhookDispatcher;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -281,6 +283,16 @@ export class Gateway {
       log.info({ path: mcpPath }, "Registered: Approval-gate middleware on MCP path");
     }
 
+    // Start webhook dispatcher worker (background HTTP delivery + HMAC + retry).
+    if (this.config.webhooks.enabled) {
+      this.webhookDispatcher = new WebhookDispatcher(this.storage, this.config.webhooks);
+      this.webhookDispatcher.start();
+      log.info(
+        { pollMs: this.config.webhooks.workerPollIntervalMs, concurrency: this.config.webhooks.workerConcurrency },
+        "Registered: Webhook dispatcher worker",
+      );
+    }
+
     // Mount rate-limit status admin endpoint at /api/rate-limit.
     this.app.route(`${this.config.gateway.apiPath}/rate-limit`, createRateLimitRoutes({ config: this.config }));
 
@@ -353,6 +365,10 @@ export class Gateway {
 
     if (this.approvalSweepInterval) {
       clearInterval(this.approvalSweepInterval);
+    }
+
+    if (this.webhookDispatcher) {
+      this.webhookDispatcher.stop();
     }
 
     if (this.toolCache?.shutdown) {
