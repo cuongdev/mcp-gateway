@@ -282,12 +282,16 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       cacheable: z.boolean().optional(),
       cacheTtlSec: z.number().int().positive().nullable().optional(),
       cachePerPrincipal: z.boolean().optional(),
+      sensitive: z.boolean().optional(),
     }).parse(await c.req.json());
     await deps.storage.tools.setCacheFlags(name, {
       cacheable: body.cacheable ?? existing.cacheable,
       cacheTtlSec: body.cacheTtlSec === undefined ? existing.cacheTtlSec : body.cacheTtlSec,
       cachePerPrincipal: body.cachePerPrincipal ?? existing.cachePerPrincipal,
     });
+    if (body.sensitive !== undefined) {
+      await deps.storage.tools.setSensitive(name, body.sensitive);
+    }
     await deps.toolRegistry.load();
     if (existing.cacheable && body.cacheable === false && deps.cache) {
       await deps.cache.invalidateTool(name);

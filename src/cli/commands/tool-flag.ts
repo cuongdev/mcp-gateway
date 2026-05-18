@@ -13,6 +13,8 @@ export function registerToolFlagCommand(program: Command): void {
     .option('--ttl <seconds>', 'Cache TTL in seconds', (v) => parseInt(v, 10))
     .option('--per-principal', 'Scope cache key per principal')
     .option('--no-per-principal', 'Share cache across principals')
+    .option('--sensitive', 'Require approval')
+    .option('--no-sensitive', 'Disable approval requirement')
     .option('--gateway <url>', 'Gateway URL')
     .option('--gateway-token <token>', 'Admin token')
     .action(async (name: string, opts) => {
@@ -21,6 +23,7 @@ export function registerToolFlagCommand(program: Command): void {
       if (opts.cacheable !== undefined) body.cacheable = opts.cacheable;
       if (opts.ttl !== undefined) body.cacheTtlSec = opts.ttl;
       if (opts.perPrincipal !== undefined) body.cachePerPrincipal = opts.perPrincipal;
+      if (opts.sensitive !== undefined) body.sensitive = opts.sensitive;
       try {
         await client.request('PATCH', `/api/tools/${encodeURIComponent(name)}`, body);
         ok(`Updated cache flags on '${name}'`);

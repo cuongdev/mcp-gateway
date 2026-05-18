@@ -109,3 +109,31 @@ describe('ToolRepo cache flags', () => {
     expect(t?.cacheTtlSec).toBeNull();
   });
 });
+
+describe('ToolRepo sensitive flag', () => {
+  let storage: SqliteAdapter;
+  beforeEach(async () => {
+    storage = await makeStorage();
+    await storage.servers.upsert({ name: 'db', transportType: 'streamable-http', transportConfig: { url: 'u' } });
+    await storage.tools.replaceServerTools('db', [{ originalName: 'q', description: '', inputSchema: {} }]);
+  });
+  afterEach(async () => { await storage.close(); });
+
+  it('defaults to sensitive=false', async () => {
+    const t = await storage.tools.findByCanonicalName('db__q');
+    expect(t?.sensitive).toBe(false);
+  });
+
+  it('setSensitive toggles', async () => {
+    await storage.tools.setSensitive('db__q', true);
+    expect((await storage.tools.findByCanonicalName('db__q'))?.sensitive).toBe(true);
+    await storage.tools.setSensitive('db__q', false);
+    expect((await storage.tools.findByCanonicalName('db__q'))?.sensitive).toBe(false);
+  });
+
+  it('list returns sensitive flag for each tool', async () => {
+    await storage.tools.setSensitive('db__q', true);
+    const all = await storage.tools.list();
+    expect(all.find((t) => t.canonicalName === 'db__q')?.sensitive).toBe(true);
+  });
+});

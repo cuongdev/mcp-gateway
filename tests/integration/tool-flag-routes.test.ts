@@ -80,4 +80,15 @@ describe('PATCH /api/tools/:name — cache flags', () => {
     expect(t?.cacheTtlSec).toBe(60);
     expect(t?.cachePerPrincipal).toBe(true);
   });
+
+  it('PATCH /tools/:name accepts sensitive flag', async () => {
+    const r = await env.app.request('/api/tools/db__q', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${env.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sensitive: true }),
+    });
+    expect(r.status).toBe(200);
+    const t = await env.storage.tools.findByCanonicalName('db__q');
+    expect(t?.sensitive).toBe(true);
+  });
 });

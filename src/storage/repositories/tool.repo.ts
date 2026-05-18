@@ -11,6 +11,7 @@ export interface ToolRow {
   cacheable: boolean;
   cacheTtlSec: number | null;
   cachePerPrincipal: boolean;
+  sensitive: boolean;
 }
 
 export interface DiscoveredTool {
@@ -35,8 +36,8 @@ export class ToolRepo {
       await this.client.execute({
         sql: `INSERT INTO tools(canonical_name, server_name, original_name, description,
                                 input_schema, enabled, discovered_at,
-                                cacheable, cache_ttl_sec, cache_per_principal)
-              VALUES (?, ?, ?, ?, ?, 1, ?, 0, NULL, 0)`,
+                                cacheable, cache_ttl_sec, cache_per_principal, sensitive)
+              VALUES (?, ?, ?, ?, ?, 1, ?, 0, NULL, 0, 0)`,
         args: [canonical, serverName, t.originalName, t.description,
                JSON.stringify(t.inputSchema), now],
       });
@@ -47,7 +48,7 @@ export class ToolRepo {
     const r = await this.client.execute({
       sql: `SELECT canonical_name, server_name, original_name, description,
                    input_schema, enabled, discovered_at,
-                   cacheable, cache_ttl_sec, cache_per_principal
+                   cacheable, cache_ttl_sec, cache_per_principal, sensitive
             FROM tools WHERE canonical_name = ?`,
       args: [canonicalName],
     });
@@ -59,7 +60,7 @@ export class ToolRepo {
     const r = await this.client.execute(
       `SELECT canonical_name, server_name, original_name, description,
               input_schema, enabled, discovered_at,
-              cacheable, cache_ttl_sec, cache_per_principal
+              cacheable, cache_ttl_sec, cache_per_principal, sensitive
        FROM tools ORDER BY canonical_name`
     );
     return r.rows.map(rowToTool);
@@ -69,7 +70,7 @@ export class ToolRepo {
     const r = await this.client.execute({
       sql: `SELECT canonical_name, server_name, original_name, description,
                    input_schema, enabled, discovered_at,
-                   cacheable, cache_ttl_sec, cache_per_principal
+                   cacheable, cache_ttl_sec, cache_per_principal, sensitive
             FROM tools WHERE server_name = ? ORDER BY canonical_name`,
       args: [serverName],
     });
@@ -94,6 +95,13 @@ export class ToolRepo {
       args: [enabled ? 1 : 0, canonicalName],
     });
   }
+
+  async setSensitive(canonical: string, sensitive: boolean): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE tools SET sensitive = ? WHERE canonical_name = ?',
+      args: [sensitive ? 1 : 0, canonical],
+    });
+  }
 }
 
 function rowToTool(r: Record<string, unknown>): ToolRow {
@@ -108,5 +116,6 @@ function rowToTool(r: Record<string, unknown>): ToolRow {
     cacheable: Number(r.cacheable) === 1,
     cacheTtlSec: r.cache_ttl_sec === null ? null : Number(r.cache_ttl_sec),
     cachePerPrincipal: Number(r.cache_per_principal) === 1,
+    sensitive: Number(r.sensitive) === 1,
   };
 }

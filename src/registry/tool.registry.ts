@@ -17,6 +17,7 @@ export interface RegisteredTool {
   cacheable: boolean;
   cacheTtlSec: number | null;
   cachePerPrincipal: boolean;
+  sensitive: boolean;
 }
 
 function toRegistered(row: ToolRow): RegisteredTool {
@@ -30,6 +31,7 @@ function toRegistered(row: ToolRow): RegisteredTool {
     cacheable: row.cacheable,
     cacheTtlSec: row.cacheTtlSec,
     cachePerPrincipal: row.cachePerPrincipal,
+    sensitive: row.sensitive,
   };
 }
 
@@ -69,6 +71,7 @@ export class ToolRegistry {
         originalName: t.name, description: t.description,
         inputSchema: t.inputSchema, enabled: true,
         cacheable: false, cacheTtlSec: null, cachePerPrincipal: false,
+        sensitive: false,
       });
     }
   }
