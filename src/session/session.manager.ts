@@ -61,6 +61,8 @@ interface HttpSession {
   config: HttpTransportConfig;
   /** MCP session ID for Streamable HTTP */
   mcpSessionId?: string;
+  /** Timestamp of the last successful send (ms since epoch) */
+  lastSeen?: number;
 }
 
 interface StdioSession {
@@ -78,15 +80,49 @@ interface StdioSession {
   /** Idle timer for stateful mode */
   idleTimer: NodeJS.Timeout | null;
   initialized: boolean;
+  /** Timestamp of the last successful send (ms since epoch) */
+  lastSeen?: number;
 }
 
 type Session = HttpSession | StdioSession;
 
 // ── Session Manager ────────────────────────────────────
 
+export interface SessionManagerOptions {
+  /** Seconds before an idle session is dropped (0 = disabled, default 600) */
+  idleTimeoutSec?: number;
+}
+
 export class SessionManager {
   /** server-name → session */
   private sessions = new Map<string, Session>();
+
+  /** Periodic cleanup interval for idle sessions */
+  private cleanupInterval?: ReturnType<typeof setInterval>;
+
+  constructor(opts: SessionManagerOptions = {}) {
+    const timeoutMs = (opts.idleTimeoutSec ?? 600) * 1000;
+    if (timeoutMs > 0) {
+      this.cleanupInterval = setInterval(
+        () => this.runCleanup(timeoutMs),
+        Math.min(timeoutMs, 60_000),
+      );
+      this.cleanupInterval.unref?.();
+    }
+  }
+
+  private runCleanup(timeoutMs: number): void {
+    const cutoff = Date.now() - timeoutMs;
+    for (const [name, session] of this.sessions) {
+      if (session.lastSeen !== undefined && session.lastSeen < cutoff) {
+        log.info({ server: name }, "Dropping idle session");
+        if (session.type === "stdio") {
+          this.killStdioSession(session);
+        }
+        this.sessions.delete(name);
+      }
+    }
+  }
 
   /**
    * Register a server session with its transport config.
@@ -230,11 +266,16 @@ export class SessionManager {
       throw new UpstreamConnectionError(serverName, "No session registered");
     }
 
+    let result: JsonRpcResponse;
     if (session.type === "http") {
-      return this.sendHttp(serverName, session, request, timeoutMs);
+      result = await this.sendHttp(serverName, session, request, timeoutMs);
     } else {
-      return this.sendStdio(serverName, session, request, timeoutMs);
+      result = await this.sendStdio(serverName, session, request, timeoutMs);
     }
+    // Update lastSeen on every successful send so the idle-cleanup loop
+    // can determine when a session was last active.
+    session.lastSeen = Date.now();
+    return result;
   }
 
   /**
@@ -260,9 +301,13 @@ export class SessionManager {
   }
 
   /**
-   * Graceful shutdown — clean up all sessions.
+   * Graceful shutdown — clean up all sessions and stop the cleanup interval.
    */
   async shutdown(): Promise<void> {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
     for (const [name, session] of this.sessions) {
       if (session.type === "stdio") {
         this.killStdioSession(session);

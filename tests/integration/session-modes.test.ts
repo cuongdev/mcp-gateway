@@ -90,3 +90,11 @@ describe('SessionManager HTTP session_mode', () => {
     server.close();
   });
 });
+
+describe('SessionManager idle cleanup', () => {
+  it('accepts idleTimeoutSec option and shutdown clears it', async () => {
+    const mgr = new SessionManager({ idleTimeoutSec: 60 });
+    mgr.shutdown();
+    // No assertion: success = no error, no hanging timer
+  });
+});
