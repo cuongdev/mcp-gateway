@@ -16,6 +16,9 @@ import { registerConfigCommand } from './commands/config.js';
 import { registerPolicyCommand } from './commands/policy.js';
 import { registerUsageCommand } from './commands/usage.js';
 import { registerToolFlagCommand } from './commands/tool-flag.js';
+import { registerCacheCommand } from './commands/cache.js';
+import { registerQuotaCommand } from './commands/quota.js';
+import { registerRateLimitCommand } from './commands/rate-limit.js';
 
 async function main() {
   const program = new Command();
@@ -41,6 +44,9 @@ async function main() {
   registerPolicyCommand(program);
   registerUsageCommand(program);
   registerToolFlagCommand(program);
+  registerCacheCommand(program);
+  registerQuotaCommand(program);
+  registerRateLimitCommand(program);
 
   await program.parseAsync(process.argv);
 }
