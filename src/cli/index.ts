@@ -10,6 +10,10 @@ import { registerInvokeCommand } from './commands/invoke.js';
 import { registerCreateMcpClientCommand } from './commands/create-mcp-client.js';
 import { registerCreateUserCommand } from './commands/create-user.js';
 import { registerCreateGroupCommand } from './commands/create-group.js';
+import { registerRoleCommand } from './commands/role.js';
+import { registerTokenCommand } from './commands/token.js';
+import { registerConfigCommand } from './commands/config.js';
+import { registerPolicyCommand } from './commands/policy.js';
 
 async function main() {
   const program = new Command();
@@ -29,6 +33,10 @@ async function main() {
   registerCreateMcpClientCommand(program);
   registerCreateUserCommand(program);
   registerCreateGroupCommand(program);
+  registerRoleCommand(program);
+  registerTokenCommand(program);
+  registerConfigCommand(program);
+  registerPolicyCommand(program);
 
   await program.parseAsync(process.argv);
 }
