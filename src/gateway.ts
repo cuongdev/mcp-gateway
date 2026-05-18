@@ -119,7 +119,7 @@ export class Gateway {
     log.info({ path: `${mcpPath}/groups/:name` }, "MCP Group endpoints mounted");
 
     // ── Auth Routes (OIDC login/callback/logout) ─────
-    const authRoutes = createAuthRoutes(this.config);
+    const authRoutes = createAuthRoutes(this.config, { storage: this.storage });
     this.app.route("/auth", authRoutes);
     log.info({ providers: this.config.oidcProviders.map((p) => p.id) }, "Auth routes mounted at /auth");
 

@@ -20,7 +20,6 @@ import { bearerTokenMiddleware } from "./auth/bearer-token.middleware.js";
 import { sessionCookieMiddleware } from "./auth/session-cookie.middleware.js";
 
 // Middleware factories
-import { createAuthMiddleware } from "./auth/oidc.middleware.js";
 import { createAuthzMiddleware } from "./authz/policy.engine.js";
 import { createAuditMiddleware } from "./audit/audit.middleware.js";
 import { createMetricsMiddleware } from "./monitoring/metrics.middleware.js";
@@ -126,28 +125,42 @@ export function buildMiddlewarePipeline(
     log.info("Registered: Bearer-token middleware on MCP path");
   }
 
-  // ── 5. OIDC Authentication — MCP routes ─────────────
+  // ── 5. Legacy UserContext shim ──────────────────────
+  // P2: the legacy `createAuthMiddleware` was retired. Downstream layers
+  // (authz/policy.engine, audit, mcp.routes) still read `c.var.user` as
+  // a `UserContext { sub, roles, email, … }`. We synthesize one from
+  // `c.var.principal` so those code paths keep functioning without a
+  // wholesale rewrite. Roles are currently empty — surfacing roles on
+  // the Principal model is tracked separately (see DONE_WITH_CONCERNS
+  // note on the P2 unification task).
+  app.use("*", async (c, next) => {
+    const p = c.get("principal");
+    if (p && !c.get("user")) {
+      c.set("user", {
+        sub: p.id,
+        email: p.email,
+        name: p.displayName,
+        roles: [],
+        claims: {},
+        issuer: c.get("authMethod") ?? "unknown",
+        expiresAt: 0,
+      });
+      const ctx = c.get("gatewayCtx");
+      if (ctx) ctx.user = c.get("user");
+    }
+    await next();
+  });
+
   const hasOIDC = (config.oidcProviders?.length ?? 0) > 0;
   if (hasOIDC) {
-    const authMiddleware = createAuthMiddleware(config);
-
-    // Protect MCP endpoints
-    app.use(`${mcpPath}/*`, authMiddleware);
-    app.use(`${mcpPath}`, authMiddleware);
-
-    // In enterprise mode, also protect admin API
-    if (config.mode === "enterprise") {
-      app.use(`${apiPath}/*`, authMiddleware);
-      log.info("Enterprise mode: Admin API requires authentication");
-    }
-
-    log.info({ providers: config.oidcProviders.map((p) => p.id) }, "Registered: OIDC authentication middleware");
+    log.info(
+      { providers: config.oidcProviders.map((p) => p.id) },
+      "OIDC providers registered — auth via session-cookie + bearer-token pipeline",
+    );
+  } else if (config.mode === "enterprise") {
+    log.warn("Enterprise mode: No OIDC providers — bearer-token auth only");
   } else {
-    if (config.mode === "enterprise") {
-      log.warn("Enterprise mode: No OIDC providers — bearer-token auth in effect");
-    } else {
-      log.info("Development mode: OIDC authentication disabled");
-    }
+    log.info("Development mode: OIDC authentication disabled");
   }
 
   // ── 6. Authorization — MCP routes ──────────────────

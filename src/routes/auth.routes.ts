@@ -1,22 +1,29 @@
 // ============================================================
-// Auth Routes — OIDC Authorization Code Flow
+// Auth Routes — OIDC Authorization Code Flow (P2 unified)
 //
 // Endpoints:
 //   GET  /auth/providers           — list configured providers
 //   GET  /auth/login/:id           — start OAuth2 + PKCE flow
 //   GET  /auth/callback/:id        — handle OAuth2 callback
 //   POST /auth/logout              — clear session cookie
-//   GET  /auth/me                  — current user info
-//   GET  /auth/token               — exchange session for Bearer token
+//   GET  /auth/me                  — current user info (from `c.var.principal`)
 //
-// Flow:
+// Flow (P2):
 //   Browser → GET /auth/login/google
 //           → redirect to Google with state + code_challenge
 //           → Google → GET /auth/callback/google?code=…&state=…
 //           → exchange code for tokens
 //           → verify ID token
-//           → issue signed session JWT as HttpOnly cookie
+//           → upsert principal (storage.principals.upsertOidcUser)
+//           → sign `{ pid: principalId }` cookie via signSessionCookie
 //           → redirect to /dashboard
+//
+// The session cookie is consumed by sessionCookieMiddleware
+// (src/middleware/auth/session-cookie.middleware.ts), which populates
+// `c.var.principal` for downstream handlers.
+//
+// /auth/token has been REMOVED in P2 — users mint API tokens via
+// /api/users/me/tokens (the standard PAT endpoint from P1).
 // ============================================================
 
 import { Hono } from "hono";
@@ -24,12 +31,12 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   createRemoteJWKSet,
   jwtVerify,
-  SignJWT,
-  jwtDecrypt,
   type JWTPayload,
 } from "jose";
 import type { GatewayConfig, OIDCProvider } from "../config/schema.js";
-import type { UserContext } from "../types/gateway.js";
+import type { StorageAdapter } from "../storage/adapter.js";
+import type { GatewayVariables } from "../middleware/types.js";
+import { signSessionCookie } from "../middleware/auth/session-cookie.middleware.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "auth" });
@@ -105,54 +112,30 @@ function generateCodeChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-// ── Session JWT helpers ───────────────────────────────
-
-async function signSessionJWT(
-  user: UserContext,
-  secret: string,
-  ttlSeconds: number
-): Promise<string> {
-  const secretKey = Buffer.from(secret, "utf-8");
-  return new SignJWT({
-    sub: user.sub,
-    email: user.email,
-    name: user.name,
-    roles: user.roles,
-    orgId: user.orgId,
-    iss: user.issuer,
-    providerId: (user as any).providerId,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${ttlSeconds}s`)
-    .sign(secretKey);
-}
-
-async function verifySessionJWT(
-  token: string,
-  secret: string
-): Promise<JWTPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, Buffer.from(secret, "utf-8"));
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
 // ── Route factory ─────────────────────────────────────
 
-export function createAuthRoutes(config: GatewayConfig) {
-  const app = new Hono();
+export interface AuthRoutesDeps {
+  storage: StorageAdapter;
+}
+
+export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
+  const app = new Hono<{ Variables: GatewayVariables }>();
   const providers = config.oidcProviders;
-  const sessionCfg = config.session;
-  const sessionSecret = sessionCfg.secret!;
-  const cookieName = sessionCfg.cookieName;
-  const cookieTTL = sessionCfg.ttl;
+  const cookieName = config.auth.sessionCookieName ?? "mcp_session";
+  const cookieTTLSeconds = 8 * 60 * 60; // 8 hours
+
+  // Eagerly encode secret; sessionCookieSecret is required when oidcProviders.length > 0
+  // (enforced by GatewayConfigSchema.superRefine). For safety in dev/no-OIDC setups,
+  // we still avoid throwing at factory time and only require it inside /callback/:id.
+  const sessionSecretBytes = config.auth.sessionCookieSecret
+    ? new TextEncoder().encode(config.auth.sessionCookieSecret)
+    : null;
 
   const publicUrl =
     config.gateway.publicUrl ??
     `http://${config.gateway.host === "0.0.0.0" ? "localhost" : config.gateway.host}:${config.gateway.port}`;
+
+  const isProd = config.mode !== "development";
 
   // ── GET /auth/providers ────────────────────────────
   // Returns list of configured providers for the login page
@@ -211,12 +194,18 @@ export function createAuthRoutes(config: GatewayConfig) {
   });
 
   // ── GET /auth/callback/:id ─────────────────────────
-  // Handle OAuth2 callback — exchange code for tokens, set session cookie
+  // Handle OAuth2 callback — exchange code for tokens, upsert principal,
+  // issue unified `{pid}` session cookie.
   app.get("/callback/:id", async (c) => {
     const providerId = c.req.param("id");
     const provider = providers.find((p) => p.id === providerId);
     if (!provider) {
       return c.json({ error: `Unknown provider: ${providerId}` }, 404);
+    }
+
+    if (!sessionSecretBytes) {
+      log.error("OIDC callback invoked but auth.sessionCookieSecret is unset");
+      return c.redirect(`/dashboard?auth_error=session_misconfigured`);
     }
 
     const code = c.req.query("code");
@@ -275,7 +264,7 @@ export function createAuthRoutes(config: GatewayConfig) {
     }
 
     // ── Verify ID token ───────────────────────────────
-    let payload: JWTPayload;
+    let claims: JWTPayload;
     try {
       const jwks = await getJWKS(provider);
       const audiences = provider.audiences ?? [provider.clientId];
@@ -283,39 +272,55 @@ export function createAuthRoutes(config: GatewayConfig) {
         issuer: discovery.issuer,
         audience: audiences,
       });
-      payload = p;
+      claims = p;
     } catch (err) {
       log.error({ provider: providerId, err }, "ID token verification failed");
       return c.redirect(`/dashboard?auth_error=invalid_id_token`);
     }
 
-    // ── Extract user context ──────────────────────────
-    const user = extractUser(payload, provider, discovery.issuer);
+    // ── Upsert principal + issue unified session cookie ────────────
+    const subject = (claims.sub as string | undefined) ?? "unknown";
+    const email =
+      (claims.email as string | undefined) ?? `${subject}@${provider.id}.oidc`;
+    const displayName =
+      (claims.name as string | undefined) ??
+      (claims.email as string | undefined) ??
+      subject;
 
-    log.info({ provider: providerId, sub: user.sub, email: user.email }, "User authenticated via OIDC");
+    const principal = await deps.storage.principals.upsertOidcUser({
+      oidcSubject: subject,
+      oidcProviderId: provider.id,
+      email,
+      displayName,
+    });
 
-    // ── Issue session JWT as HttpOnly cookie ──────────
-    const sessionToken = await signSessionJWT(user, sessionSecret, cookieTTL);
+    log.info(
+      { provider: providerId, sub: subject, principalId: principal.id, email },
+      "User authenticated via OIDC; session cookie issued",
+    );
 
-    const cookieFlags = [
-      `${cookieName}=${sessionToken}`,
-      "HttpOnly",
-      "Path=/",
-      `Max-Age=${cookieTTL}`,
-      "SameSite=Lax",
-      ...(sessionCfg.secure ? ["Secure"] : []),
-    ].join("; ");
+    const sessionCookie = await signSessionCookie(
+      { principalId: principal.id },
+      sessionSecretBytes,
+      cookieTTLSeconds,
+    );
 
-    c.header("Set-Cookie", cookieFlags);
+    c.header(
+      "Set-Cookie",
+      `${cookieName}=${sessionCookie}` +
+        `; HttpOnly; Path=/; SameSite=Lax; Max-Age=${cookieTTLSeconds}` +
+        (isProd ? "; Secure" : ""),
+    );
     return c.redirect(pending.redirectAfter);
   });
 
   // ── POST /auth/logout ──────────────────────────────
+  // Clear the session cookie. No JWT verification needed.
   app.post("/logout", (c) => {
-    // Clear session cookie
     c.header(
       "Set-Cookie",
-      `${cookieName}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`
+      `${cookieName}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0` +
+        (isProd ? "; Secure" : ""),
     );
     return c.json({ ok: true });
   });
@@ -323,144 +328,28 @@ export function createAuthRoutes(config: GatewayConfig) {
   app.get("/logout", (c) => {
     c.header(
       "Set-Cookie",
-      `${cookieName}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`
+      `${cookieName}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0` +
+        (isProd ? "; Secure" : ""),
     );
     return c.redirect("/dashboard");
   });
 
   // ── GET /auth/me ───────────────────────────────────
-  // Returns current user from session cookie (or Bearer token)
-  app.get("/me", async (c) => {
-    const user = await resolveUser(c.req.raw, sessionSecret, cookieName, providers);
-    if (!user) return c.json({ authenticated: false }, 401);
+  // Returns the principal resolved by sessionCookieMiddleware (or
+  // bearerTokenMiddleware). Reads `c.var.principal` directly — no
+  // re-verification of cookies/tokens happens here.
+  app.get("/me", (c) => {
+    const principal = c.get("principal");
+    if (!principal) {
+      return c.json({ error: { code: "unauthenticated" } }, 401);
+    }
     return c.json({
-      authenticated: true,
-      user: {
-        sub: user.sub,
-        email: user.email,
-        name: user.name,
-        roles: user.roles,
-        orgId: user.orgId,
-        issuer: user.issuer,
-      },
+      principalId: principal.id,
+      type: principal.type,
+      email: principal.email ?? null,
+      displayName: principal.displayName,
     });
   });
 
-  // ── GET /auth/token ────────────────────────────────
-  // Exchange session cookie for a Bearer token (for programmatic API use)
-  app.get("/token", async (c) => {
-    const user = await resolveUser(c.req.raw, sessionSecret, cookieName, providers);
-    if (!user) return c.json({ error: "Not authenticated" }, 401);
-
-    // Issue a short-lived API token (1 hour)
-    const apiToken = await signSessionJWT(user, sessionSecret, 3600);
-    return c.json({ token: apiToken, expiresIn: 3600 });
-  });
-
   return app;
-}
-
-// ── Helpers ───────────────────────────────────────────
-
-/**
- * Resolve user from session cookie or Bearer token.
- * Used by /auth/me and can be reused by auth middleware.
- */
-export async function resolveUser(
-  req: Request,
-  sessionSecret: string,
-  cookieName: string,
-  providers: OIDCProvider[]
-): Promise<UserContext | null> {
-  // 1. Try session cookie
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  const cookies = Object.fromEntries(
-    cookieHeader.split(";").map((c) => {
-      const [k, ...v] = c.trim().split("=");
-      return [k?.trim() ?? "", v.join("=")];
-    })
-  );
-  const sessionToken = cookies[cookieName];
-  if (sessionToken) {
-    const payload = await verifySessionJWT(sessionToken, sessionSecret);
-    if (payload) return payloadToUser(payload);
-  }
-
-  // 2. Try Bearer token — validate against all providers
-  const authHeader = req.headers.get("authorization") ?? "";
-  const match = authHeader.match(/^[Bb]earer\s+(.+)$/);
-  if (match) {
-    const bearerToken = match[1]!;
-
-    // Try session secret first (tokens issued by /auth/token)
-    const selfPayload = await verifySessionJWT(bearerToken, sessionSecret);
-    if (selfPayload) return payloadToUser(selfPayload);
-
-    // Try each OIDC provider's JWKS
-    for (const provider of providers) {
-      try {
-        const jwks = await getJWKS(provider);
-        const discovery = await getDiscovery(provider);
-        const audiences = provider.audiences ?? [provider.clientId];
-        const { payload } = await jwtVerify(bearerToken, jwks, {
-          issuer: discovery.issuer,
-          audience: audiences,
-        });
-        return extractUser(payload, provider, discovery.issuer);
-      } catch {
-        // Try next provider
-      }
-    }
-  }
-
-  return null;
-}
-
-function payloadToUser(payload: JWTPayload): UserContext {
-  return {
-    sub: payload["sub"] ?? "unknown",
-    email: payload["email"] as string | undefined,
-    name: payload["name"] as string | undefined,
-    roles: (payload["roles"] as string[] | undefined) ?? [],
-    orgId: payload["orgId"] as string | undefined,
-    claims: payload as Record<string, unknown>,
-    issuer: payload["iss"] ?? "unknown",
-    expiresAt: payload["exp"] ?? 0,
-  };
-}
-
-function extractUser(
-  payload: JWTPayload,
-  provider: OIDCProvider,
-  issuer: string
-): UserContext {
-  // Extract roles from configured claim
-  let roles: string[] = [];
-  const rolesClaim = payload[provider.rolesClaim];
-  if (Array.isArray(rolesClaim)) {
-    roles = rolesClaim.map(String);
-  } else if (typeof rolesClaim === "string") {
-    roles = rolesClaim.split(",").map((r) => r.trim()).filter(Boolean);
-  }
-
-  // Apply role mappings (e.g. provider group → gateway role)
-  const mappedRoles = new Set(roles);
-  for (const [providerRole, gatewayRoles] of Object.entries(provider.roleMappings)) {
-    if (roles.includes(providerRole)) {
-      gatewayRoles.forEach((r) => mappedRoles.add(r));
-    }
-  }
-
-  const orgId = payload[provider.orgClaim] as string | undefined;
-
-  return {
-    sub: payload["sub"] ?? "unknown",
-    email: payload["email"] as string | undefined,
-    name: payload["name"] as string | undefined,
-    orgId,
-    roles: Array.from(mappedRoles),
-    claims: payload as Record<string, unknown>,
-    issuer,
-    expiresAt: payload["exp"] ?? 0,
-  };
 }

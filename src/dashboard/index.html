@@ -87,10 +87,20 @@
           .then(d => setProviders(d.providers ?? []))
           .catch(() => setProviders([]));
 
-        // Check current session
+        // Check current session — P2 unified shape:
+        //   { principalId, type, email, displayName } on 200
+        //   { error: { code: 'unauthenticated' } } on 401
         fetch('/auth/me', { credentials: 'same-origin' })
-          .then(r => r.json())
-          .then(d => setUser(d.authenticated ? d.user : null))
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (!d || d.error) return setUser(null);
+            setUser({
+              sub: d.principalId,
+              name: d.displayName,
+              email: d.email,
+              roles: [], // roles not yet surfaced on Principal (P2 follow-up)
+            });
+          })
           .catch(() => setUser(null));
       }, []);
 

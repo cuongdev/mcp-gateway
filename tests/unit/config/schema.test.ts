@@ -37,4 +37,52 @@ describe('GatewayConfigSchema (P0 additions)', () => {
     });
     expect(cfg.storage.path).toBe(':memory:');
   });
+
+  it('P2: requires auth.sessionCookieSecret when oidcProviders are configured', () => {
+    const result = GatewayConfigSchema.safeParse({
+      mode: 'enterprise',
+      gateway: { port: 3000, host: '0.0.0.0', mcpPath: '/mcp', apiPath: '/api' },
+      oidcProviders: [
+        {
+          id: 'google',
+          name: 'Google',
+          discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
+          clientId: 'cid',
+          clientSecret: 'csecret',
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issues = result.error.issues;
+      expect(
+        issues.some(
+          (i) =>
+            i.path.join('.') === 'auth.sessionCookieSecret' &&
+            i.message.includes('sessionCookieSecret is required'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('P2: passes when both oidcProviders and auth.sessionCookieSecret are set', () => {
+    const cfg = GatewayConfigSchema.parse({
+      mode: 'enterprise',
+      gateway: { port: 3000, host: '0.0.0.0', mcpPath: '/mcp', apiPath: '/api' },
+      oidcProviders: [
+        {
+          id: 'google',
+          name: 'Google',
+          discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
+          clientId: 'cid',
+          clientSecret: 'csecret',
+        },
+      ],
+      auth: {
+        sessionCookieSecret: 'a'.repeat(32),
+      },
+    });
+    expect(cfg.oidcProviders).toHaveLength(1);
+    expect(cfg.auth.sessionCookieSecret).toBe('a'.repeat(32));
+  });
 });

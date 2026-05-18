@@ -261,6 +261,15 @@ export const GatewayConfigSchema = z.object({
     cfg.auth.requireAuthForMcp = cfg.mode !== "development";
   }
   return cfg;
+}).superRefine((cfg, ctx) => {
+  if (cfg.oidcProviders.length > 0 && !cfg.auth.sessionCookieSecret) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["auth", "sessionCookieSecret"],
+      message:
+        "auth.sessionCookieSecret is required when oidcProviders are configured (P2 unification)",
+    });
+  }
 });
 
 // ── Derived Types ─────────────────────────────────────
