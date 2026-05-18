@@ -38,6 +38,8 @@ import type { GatewayConfig } from "../config/schema.js";
 import type { ToolRegistry } from "../registry/tool.registry.js";
 import type { ToolGroupManager } from "../registry/tool.groups.js";
 import type { SessionManager, TransportConfig } from "../session/session.manager.js";
+import type { StorageAdapter } from "../storage/adapter.js";
+import type { ServerTransportType } from "../storage/repositories/server.repo.js";
 import { performHealthCheck } from "../middleware/monitoring/health.js";
 import { getMetrics } from "../middleware/monitoring/metrics.middleware.js";
 import {
@@ -53,6 +55,7 @@ const log = logger.child({ component: "admin-api" });
 
 interface AdminRouteDeps {
   config: GatewayConfig;
+  storage: StorageAdapter;
   toolRegistry: ToolRegistry;
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
@@ -63,7 +66,8 @@ interface AdminRouteDeps {
  */
 export function createAdminRoutes(deps: AdminRouteDeps) {
   const app = new Hono<{ Variables: GatewayVariables }>();
-  const { config, toolRegistry, toolGroups, sessionManager } = deps;
+  const { config, storage, toolRegistry, toolGroups, sessionManager } = deps;
+  void config;
 
   // ═══════════════════════════════════════════════════════
   // Health & Monitoring
@@ -87,10 +91,17 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   /** List all registered servers */
   app.get("/servers", async (c) => {
-    const servers = toolRegistry.listServers();
-    const details = servers.map((name) => ({
+    // Aggregate servers from the in-memory tool registry. Each server is
+    // represented by its name plus the canonical names of its tools.
+    const byServer = new Map<string, string[]>();
+    for (const t of toolRegistry.listAll()) {
+      const list = byServer.get(t.serverName) ?? [];
+      list.push(t.canonicalName);
+      byServer.set(t.serverName, list);
+    }
+    const details = Array.from(byServer.entries()).map(([name, tools]) => ({
       name,
-      tools: toolRegistry.listServerTools(name).map((t) => t.name),
+      tools,
       session: sessionManager.has(name),
     }));
     return c.json({ servers: details });
@@ -107,13 +118,25 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       return c.json({ error: "name and transport are required" }, 400);
     }
 
+    // Persist to storage so the server survives restarts.
+    try {
+      await storage.servers.upsert({
+        name: body.name,
+        transportType: body.transport.type as ServerTransportType,
+        transportConfig: body.transport as unknown as Record<string, unknown>,
+      });
+    } catch (err) {
+      log.error({ server: body.name, err }, "Failed to persist server");
+      return c.json({ error: "Failed to persist server" }, 500);
+    }
+
     // Register session
     sessionManager.register(body.name, body.transport);
 
     // Discover tools from the server (initialize handshake + tools/list)
     try {
       const tools = await sessionManager.discoverTools(body.name);
-      toolRegistry.registerServerTools(body.name, tools);
+      await toolRegistry.registerServerTools(body.name, tools);
 
       log.info(
         { server: body.name, toolCount: tools.length },
@@ -122,7 +145,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
       return c.json({
         server: body.name,
-        tools: tools.map((t: any) => toolRegistry.toCanonical(body.name, t.name)),
+        tools: tools.map((t: any) => `${body.name}__${t.name}`),
       }, 201);
     } catch (err) {
       log.error({ server: body.name, err }, "Failed to discover tools");
@@ -137,8 +160,13 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   /** Deregister a server */
   app.delete("/servers/:name", async (c) => {
     const name = c.req.param("name");
-    toolRegistry.removeServerTools(name);
+    await toolRegistry.removeServer(name);
     sessionManager.remove(name);
+    try {
+      await storage.servers.deleteByName(name);
+    } catch (err) {
+      log.warn({ server: name, err }, "Failed to delete server from storage");
+    }
     log.info({ server: name }, "Server deregistered");
     return c.json({ ok: true });
   });
@@ -153,11 +181,11 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
     try {
       const tools = await sessionManager.discoverTools(name);
-      toolRegistry.registerServerTools(name, tools);
+      await toolRegistry.registerServerTools(name, tools);
 
       return c.json({
         server: name,
-        tools: tools.map((t: any) => toolRegistry.toCanonical(name, t.name)),
+        tools: tools.map((t: any) => `${name}__${t.name}`),
       });
     } catch (err) {
       return c.json({ error: "Tool sync failed", details: String(err) }, 500);
@@ -187,16 +215,16 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   /** Enable a tool */
   app.put("/tools/:name/enable", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
-    const ok = toolRegistry.setEnabled(name, true);
-    if (!ok) return c.json({ error: "Tool not found" }, 404);
+    if (!toolRegistry.get(name)) return c.json({ error: "Tool not found" }, 404);
+    await toolRegistry.setEnabled(name, true);
     return c.json({ tool: name, enabled: true });
   });
 
   /** Disable a tool */
   app.put("/tools/:name/disable", async (c) => {
     const name = decodeURIComponent(c.req.param("name"));
-    const ok = toolRegistry.setEnabled(name, false);
-    if (!ok) return c.json({ error: "Tool not found" }, 404);
+    if (!toolRegistry.get(name)) return c.json({ error: "Tool not found" }, 404);
+    await toolRegistry.setEnabled(name, false);
     return c.json({ tool: name, enabled: false });
   });
 
@@ -241,41 +269,59 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     const group = toolGroups.get(c.req.param("name"));
     if (!group) return c.json({ error: "Group not found" }, 404);
 
-    const tools = toolGroups.listGroupTools(group.name);
-    return c.json({ group, resolvedTools: tools });
+    // resolveTools() filters to enabled tools only — preserve previous semantics
+    // by returning the full list of canonical tool names declared on the group.
+    return c.json({ group, resolvedTools: group.tools });
   });
 
-  /** Update a group */
+  // ── Group mutation endpoints (partial CRUD) ─────────
+  // TODO(P1): T28 — the storage-backed ToolGroupManager only exposes
+  // create/delete/get/list/resolveTools. Update/addTool/removeTool require
+  // either a richer GroupRepo or a delete+recreate pattern. For P0 we return
+  // 501 so the surface stays stable but the operation is explicitly deferred.
+
+  /** Update a group — not implemented in P0 */
   app.put("/groups/:name", async (c) => {
-    const body = await c.req.json();
-    const updated = toolGroups.update(c.req.param("name"), body);
-    if (!updated) return c.json({ error: "Group not found" }, 404);
-    return c.json({ group: updated });
+    return c.json(
+      {
+        error: "Not implemented",
+        detail:
+          "Group update is deferred to P1. Use DELETE /groups/:name + POST /groups to recreate.",
+      },
+      501
+    );
   });
 
   /** Delete a group */
   app.delete("/groups/:name", async (c) => {
-    const ok = toolGroups.delete(c.req.param("name"));
-    if (!ok) return c.json({ error: "Group not found" }, 404);
+    const name = c.req.param("name");
+    if (!toolGroups.get(name)) return c.json({ error: "Group not found" }, 404);
+    await toolGroups.delete(name);
     return c.json({ ok: true });
   });
 
-  /** Add tool to group */
+  /** Add tool to group — not implemented in P0 */
   app.post("/groups/:name/tools", async (c) => {
-    const { tool } = await c.req.json() as { tool: string };
-    const ok = toolGroups.addTool(c.req.param("name"), tool);
-    if (!ok) return c.json({ error: "Group not found" }, 404);
-    return c.json({ ok: true });
+    return c.json(
+      {
+        error: "Not implemented",
+        detail:
+          "Adding a tool to an existing group is deferred to P1. Recreate the group with the updated tool list.",
+      },
+      501
+    );
   });
 
-  /** Remove tool from group */
+  /** Remove tool from group — not implemented in P0 */
   app.delete("/groups/:name/tools/:tool", async (c) => {
-    const ok = toolGroups.removeTool(
-      c.req.param("name"),
-      decodeURIComponent(c.req.param("tool"))
+    return c.json(
+      {
+        error: "Not implemented",
+        detail:
+          "Removing a tool from an existing group is deferred to P1. Recreate the group with the updated tool list.",
+      },
+      501
     );
-    if (!ok) return c.json({ error: "Group or tool not found" }, 404);
-    return c.json({ ok: true });
   });
 
   // ═══════════════════════════════════════════════════════

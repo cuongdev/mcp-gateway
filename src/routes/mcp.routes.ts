@@ -15,7 +15,7 @@ import { Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
 import type { GatewayVariables } from "../middleware/types.js";
 import type { GatewayContext } from "../types/gateway.js";
-import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
+import type { JsonRpcRequest, JsonRpcResponse, MCPTool } from "../types/mcp.js";
 import {
   isRequest,
   MCP_METHODS,
@@ -24,10 +24,26 @@ import {
   MCP_ERROR_CODES,
 } from "../types/mcp.js";
 import { InvalidMessageError } from "../types/errors.js";
-import type { ToolRegistry } from "../registry/tool.registry.js";
+import type { ToolRegistry, RegisteredTool } from "../registry/tool.registry.js";
 import type { ToolGroupManager } from "../registry/tool.groups.js";
 import type { SessionManager } from "../session/session.manager.js";
 import { logger } from "../utils/logger.js";
+
+/** Map a RegisteredTool to the MCP-protocol tool shape. */
+function toMCPTool(r: RegisteredTool): MCPTool {
+  return {
+    name: r.canonicalName,
+    description: r.description,
+    inputSchema: r.inputSchema as MCPTool["inputSchema"],
+  };
+}
+
+/** Distinct server names known to the registry, sorted. */
+function listKnownServers(registry: ToolRegistry): string[] {
+  const set = new Set<string>();
+  for (const t of registry.listAll()) set.add(t.serverName);
+  return Array.from(set).sort();
+}
 
 const log = logger.child({ component: "mcp-routes" });
 
@@ -59,6 +75,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       body as JsonRpcRequest,
       ctx,
       toolRegistry,
+      toolGroups,
       sessionManager,
       undefined // no group filter
     );
@@ -117,6 +134,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       body as JsonRpcRequest,
       ctx,
       toolRegistry,
+      toolGroups,
       sessionManager,
       groupName
     );
@@ -134,6 +152,7 @@ async function handleMCPRequest(
   request: JsonRpcRequest,
   context: GatewayContext,
   registry: ToolRegistry,
+  groups: ToolGroupManager,
   sessionManager: SessionManager,
   groupName: string | undefined
 ): Promise<JsonRpcResponse> {
@@ -160,10 +179,17 @@ async function handleMCPRequest(
 
     // ── Tools ────────────────────────────────────────
     case MCP_METHODS.TOOLS_LIST: {
-      const tools = groupName
-        ? deps_toolGroups_listGroupTools(registry, groupName)
-        : registry.listTools();
-
+      let tools: MCPTool[];
+      if (groupName) {
+        // Group-scoped listing: resolveTools() already filters to enabled tools.
+        const canonical = groups.resolveTools(groupName);
+        tools = canonical
+          .map((cn) => registry.get(cn))
+          .filter((t): t is RegisteredTool => !!t && t.enabled)
+          .map(toMCPTool);
+      } else {
+        tools = registry.list().map(toMCPTool);
+      }
       return createSuccessResponse(id, { tools });
     }
 
@@ -173,14 +199,20 @@ async function handleMCPRequest(
         return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing tool name");
       }
 
-      // If in a group, verify tool is in the group
+      // If in a group, verify the tool is in the group
       if (groupName) {
-        // Use registry to check since we can't access toolGroups directly here
-        // The group filtering is done at the route level
+        const allowed = groups.resolveTools(groupName);
+        if (!allowed.includes(canonicalName)) {
+          return createErrorResponse(
+            id,
+            MCP_ERROR_CODES.METHOD_NOT_FOUND,
+            `Tool '${canonicalName}' is not part of group '${groupName}'`
+          );
+        }
       }
 
       // Resolve canonical name → server + original tool name
-      const resolved = registry.resolve(canonicalName);
+      const resolved = registry.get(canonicalName);
       if (!resolved) {
         return createErrorResponse(
           id,
@@ -197,7 +229,7 @@ async function handleMCPRequest(
         id,
         method: MCP_METHODS.TOOLS_CALL,
         params: {
-          name: resolved.toolName,
+          name: resolved.originalName,
           arguments: params?.arguments,
         },
       };
@@ -206,7 +238,7 @@ async function handleMCPRequest(
         {
           canonical: canonicalName,
           server: resolved.serverName,
-          tool: resolved.toolName,
+          tool: resolved.originalName,
         },
         "Routing tool call"
       );
@@ -222,7 +254,7 @@ async function handleMCPRequest(
     case MCP_METHODS.RESOURCES_LIST:
     case MCP_METHODS.RESOURCES_READ: {
       // Pass to first available server
-      const servers = registry.listServers();
+      const servers = listKnownServers(registry);
       if (servers.length === 0) {
         return createSuccessResponse(id, { resources: [] });
       }
@@ -232,7 +264,7 @@ async function handleMCPRequest(
     // ── Prompts (pass-through) ───────────────────────
     case MCP_METHODS.PROMPTS_LIST:
     case MCP_METHODS.PROMPTS_GET: {
-      const servers = registry.listServers();
+      const servers = listKnownServers(registry);
       if (servers.length === 0) {
         return createSuccessResponse(id, { prompts: [] });
       }
@@ -246,14 +278,4 @@ async function handleMCPRequest(
         `Unknown method: ${method}`
       );
   }
-}
-
-/** Helper — list tools for a group using the registry */
-function deps_toolGroups_listGroupTools(
-  registry: ToolRegistry,
-  groupName: string
-): ReturnType<typeof registry.listTools> {
-  // This is a simplified version; the full impl uses ToolGroupManager
-  // In practice, the gateway injects the group manager properly
-  return registry.listTools();
 }
