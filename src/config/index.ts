@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { GatewayConfigSchema, type GatewayConfig } from "./schema.js";
 import { ConfigurationError } from "../types/errors.js";
+import { substituteEnv } from "./env-substitution.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "config" });
@@ -27,7 +28,7 @@ export function loadConfig(configPath?: string): GatewayConfig {
   if (existsSync(resolvedPath)) {
     try {
       const raw = readFileSync(resolvedPath, "utf-8");
-      fileConfig = JSON.parse(raw);
+      fileConfig = substituteEnv(JSON.parse(raw)) as Record<string, unknown>;
       log.info({ path: resolvedPath }, "Loaded configuration file");
     } catch (err) {
       throw new ConfigurationError(
