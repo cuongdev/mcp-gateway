@@ -9,6 +9,7 @@ import { PolicyRepo } from './repositories/policy.repo.js';
 import { AuditRepo } from './repositories/audit.repo.js';
 import { PromptRepo } from './repositories/prompt.repo.js';
 import { UsageCounterRepo } from './repositories/usage-counter.repo.js';
+import { CacheEntryRepo } from './repositories/cache-entry.repo.js';
 import { listMigrations } from './migrations/index.js';
 
 export interface PostgresAdapterOptions {
@@ -36,6 +37,7 @@ export class PostgresAdapter implements StorageAdapter {
   public readonly audit: AuditRepo;
   public readonly prompts: PromptRepo;
   public readonly usage: UsageCounterRepo;
+  public readonly cache: CacheEntryRepo;
 
   constructor(opts: PostgresAdapterOptions) {
     this.sql = postgres(opts.url, { onnotice: () => undefined });
@@ -52,6 +54,7 @@ export class PostgresAdapter implements StorageAdapter {
     this.audit      = new AuditRepo(this.client as never);
     this.prompts    = new PromptRepo(this.client as never);
     this.usage      = new UsageCounterRepo(this.client as never);
+    this.cache      = new CacheEntryRepo(this.client as never);
   }
 
   async init(): Promise<void> {
