@@ -105,8 +105,16 @@ export const cacheMisses = new Counter({
 export const upstreamLatency = new Histogram({
   name: "mcp_gateway_upstream_latency_seconds",
   help: "Upstream server response latency in seconds",
-  labelNames: ["server"] as const,
+  labelNames: ["server", "transport"] as const,
   buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [metricsRegistry],
+});
+
+export const toolCallDuration = new Histogram({
+  name: "mcp_tool_call_duration_seconds",
+  help: "End-to-end tool call latency (gateway-observed)",
+  labelNames: ["tool", "result"] as const,
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
   registers: [metricsRegistry],
 });
 

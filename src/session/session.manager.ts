@@ -18,6 +18,7 @@ import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.j
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
 import { withSpan, currentTraceparent } from "../observability/spans.js";
+import { upstreamLatency } from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "session-manager" });
@@ -413,12 +414,17 @@ export class SessionManager {
         if (tp) headers["traceparent"] = tp;
 
         try {
+          const fetchStart = Date.now();
           const response = await fetch(session.config.url, {
             method: "POST",
             headers,
             body: JSON.stringify(request),
             signal: controller.signal,
           });
+          upstreamLatency.observe(
+            { server: serverName, transport: "streamable-http" },
+            (Date.now() - fetchStart) / 1000
+          );
 
           clearTimeout(timer);
 

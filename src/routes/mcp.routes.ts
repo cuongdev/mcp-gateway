@@ -29,6 +29,7 @@ import type { ToolGroupManager } from "../registry/tool.groups.js";
 import type { PromptRegistry } from "../registry/prompt.registry.js";
 import type { SessionManager } from "../session/session.manager.js";
 import { withSpan } from "../observability/spans.js";
+import { toolCallDuration } from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
 
 /** Map a RegisteredTool to the MCP-protocol tool shape. */
@@ -223,56 +224,67 @@ async function handleMCPRequest(
           "mcp.group": groupName,
         },
         async () => {
-          if (!canonicalName) {
-            return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing tool name");
-          }
+          const toolStart = Date.now();
+          try {
+            if (!canonicalName) {
+              toolCallDuration.observe({ tool: "unknown", result: "error" }, (Date.now() - toolStart) / 1000);
+              return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing tool name");
+            }
 
-          // If in a group, verify the tool is in the group
-          if (groupName) {
-            const allowed = groups.resolveTools(groupName);
-            if (!allowed.includes(canonicalName)) {
+            // If in a group, verify the tool is in the group
+            if (groupName) {
+              const allowed = groups.resolveTools(groupName);
+              if (!allowed.includes(canonicalName)) {
+                toolCallDuration.observe({ tool: canonicalName, result: "error" }, (Date.now() - toolStart) / 1000);
+                return createErrorResponse(
+                  id,
+                  MCP_ERROR_CODES.METHOD_NOT_FOUND,
+                  `Tool '${canonicalName}' is not part of group '${groupName}'`
+                );
+              }
+            }
+
+            // Resolve canonical name → server + original tool name
+            const resolved = registry.get(canonicalName);
+            if (!resolved) {
+              toolCallDuration.observe({ tool: canonicalName, result: "error" }, (Date.now() - toolStart) / 1000);
               return createErrorResponse(
                 id,
                 MCP_ERROR_CODES.METHOD_NOT_FOUND,
-                `Tool '${canonicalName}' is not part of group '${groupName}'`
+                `Tool not found: ${canonicalName}`
               );
             }
-          }
 
-          // Resolve canonical name → server + original tool name
-          const resolved = registry.get(canonicalName);
-          if (!resolved) {
-            return createErrorResponse(
+            context.targetServer = resolved.serverName;
+
+            // Rewrite the request with the original tool name
+            const upstreamRequest: JsonRpcRequest = {
+              jsonrpc: "2.0",
               id,
-              MCP_ERROR_CODES.METHOD_NOT_FOUND,
-              `Tool not found: ${canonicalName}`
+              method: MCP_METHODS.TOOLS_CALL,
+              params: {
+                name: resolved.originalName,
+                arguments: params?.arguments,
+              },
+            };
+
+            log.debug(
+              {
+                canonical: canonicalName,
+                server: resolved.serverName,
+                tool: resolved.originalName,
+              },
+              "Routing tool call"
             );
+
+            // Forward via session manager
+            const result = await sessionManager.send(resolved.serverName, upstreamRequest);
+            toolCallDuration.observe({ tool: canonicalName, result: "success" }, (Date.now() - toolStart) / 1000);
+            return result;
+          } catch (err) {
+            toolCallDuration.observe({ tool: canonicalName ?? "unknown", result: "error" }, (Date.now() - toolStart) / 1000);
+            throw err;
           }
-
-          context.targetServer = resolved.serverName;
-
-          // Rewrite the request with the original tool name
-          const upstreamRequest: JsonRpcRequest = {
-            jsonrpc: "2.0",
-            id,
-            method: MCP_METHODS.TOOLS_CALL,
-            params: {
-              name: resolved.originalName,
-              arguments: params?.arguments,
-            },
-          };
-
-          log.debug(
-            {
-              canonical: canonicalName,
-              server: resolved.serverName,
-              tool: resolved.originalName,
-            },
-            "Routing tool call"
-          );
-
-          // Forward via session manager
-          return sessionManager.send(resolved.serverName, upstreamRequest);
         },
       );
     }
