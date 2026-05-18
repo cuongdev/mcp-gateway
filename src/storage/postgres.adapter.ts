@@ -8,6 +8,7 @@ import { GroupRepo } from './repositories/group.repo.js';
 import { PolicyRepo } from './repositories/policy.repo.js';
 import { AuditRepo } from './repositories/audit.repo.js';
 import { PromptRepo } from './repositories/prompt.repo.js';
+import { UsageCounterRepo } from './repositories/usage-counter.repo.js';
 import { listMigrations } from './migrations/index.js';
 
 export interface PostgresAdapterOptions {
@@ -34,6 +35,7 @@ export class PostgresAdapter implements StorageAdapter {
   public readonly policies: PolicyRepo;
   public readonly audit: AuditRepo;
   public readonly prompts: PromptRepo;
+  public readonly usage: UsageCounterRepo;
 
   constructor(opts: PostgresAdapterOptions) {
     this.sql = postgres(opts.url, { onnotice: () => undefined });
@@ -49,6 +51,7 @@ export class PostgresAdapter implements StorageAdapter {
     this.policies   = new PolicyRepo(this.client as never);
     this.audit      = new AuditRepo(this.client as never);
     this.prompts    = new PromptRepo(this.client as never);
+    this.usage      = new UsageCounterRepo(this.client as never);
   }
 
   async init(): Promise<void> {
