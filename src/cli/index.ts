@@ -7,6 +7,9 @@ import { registerDeregisterCommand } from './commands/deregister.js';
 import { registerListCommand } from './commands/list.js';
 import { registerEnableDisableCommands } from './commands/enable.js';
 import { registerInvokeCommand } from './commands/invoke.js';
+import { registerCreateMcpClientCommand } from './commands/create-mcp-client.js';
+import { registerCreateUserCommand } from './commands/create-user.js';
+import { registerCreateGroupCommand } from './commands/create-group.js';
 
 async function main() {
   const program = new Command();
@@ -23,6 +26,9 @@ async function main() {
   registerListCommand(program);
   registerEnableDisableCommands(program);
   registerInvokeCommand(program);
+  registerCreateMcpClientCommand(program);
+  registerCreateUserCommand(program);
+  registerCreateGroupCommand(program);
 
   await program.parseAsync(process.argv);
 }
