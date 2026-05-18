@@ -8,6 +8,9 @@ export interface ToolRow {
   inputSchema: Record<string, unknown>;
   enabled: boolean;
   discoveredAt: number;
+  cacheable: boolean;
+  cacheTtlSec: number | null;
+  cachePerPrincipal: boolean;
 }
 
 export interface DiscoveredTool {
@@ -30,9 +33,10 @@ export class ToolRepo {
     for (const t of tools) {
       const canonical = `${serverName}__${t.originalName}`;
       await this.client.execute({
-        sql: `INSERT INTO tools(canonical_name, server_name, original_name,
-                                description, input_schema, enabled, discovered_at)
-              VALUES (?, ?, ?, ?, ?, 1, ?)`,
+        sql: `INSERT INTO tools(canonical_name, server_name, original_name, description,
+                                input_schema, enabled, discovered_at,
+                                cacheable, cache_ttl_sec, cache_per_principal)
+              VALUES (?, ?, ?, ?, ?, 1, ?, 0, NULL, 0)`,
         args: [canonical, serverName, t.originalName, t.description,
                JSON.stringify(t.inputSchema), now],
       });
@@ -42,7 +46,9 @@ export class ToolRepo {
   async findByCanonicalName(canonicalName: string): Promise<ToolRow | null> {
     const r = await this.client.execute({
       sql: `SELECT canonical_name, server_name, original_name, description,
-                   input_schema, enabled, discovered_at FROM tools WHERE canonical_name = ?`,
+                   input_schema, enabled, discovered_at,
+                   cacheable, cache_ttl_sec, cache_per_principal
+            FROM tools WHERE canonical_name = ?`,
       args: [canonicalName],
     });
     if (r.rows.length === 0) return null;
@@ -52,7 +58,9 @@ export class ToolRepo {
   async list(): Promise<ToolRow[]> {
     const r = await this.client.execute(
       `SELECT canonical_name, server_name, original_name, description,
-              input_schema, enabled, discovered_at FROM tools ORDER BY canonical_name`
+              input_schema, enabled, discovered_at,
+              cacheable, cache_ttl_sec, cache_per_principal
+       FROM tools ORDER BY canonical_name`
     );
     return r.rows.map(rowToTool);
   }
@@ -60,11 +68,24 @@ export class ToolRepo {
   async listForServer(serverName: string): Promise<ToolRow[]> {
     const r = await this.client.execute({
       sql: `SELECT canonical_name, server_name, original_name, description,
-                   input_schema, enabled, discovered_at FROM tools
-            WHERE server_name = ? ORDER BY canonical_name`,
+                   input_schema, enabled, discovered_at,
+                   cacheable, cache_ttl_sec, cache_per_principal
+            FROM tools WHERE server_name = ? ORDER BY canonical_name`,
       args: [serverName],
     });
     return r.rows.map(rowToTool);
+  }
+
+  async setCacheFlags(
+    canonical: string,
+    flags: { cacheable: boolean; cacheTtlSec: number | null; cachePerPrincipal: boolean },
+  ): Promise<void> {
+    await this.client.execute({
+      sql: `UPDATE tools
+            SET cacheable = ?, cache_ttl_sec = ?, cache_per_principal = ?
+            WHERE canonical_name = ?`,
+      args: [flags.cacheable ? 1 : 0, flags.cacheTtlSec, flags.cachePerPrincipal ? 1 : 0, canonical],
+    });
   }
 
   async setEnabled(canonicalName: string, enabled: boolean): Promise<void> {
@@ -84,5 +105,8 @@ function rowToTool(r: Record<string, unknown>): ToolRow {
     inputSchema: JSON.parse(r.input_schema as string),
     enabled: Number(r.enabled) === 1,
     discoveredAt: Number(r.discovered_at),
+    cacheable: Number(r.cacheable) === 1,
+    cacheTtlSec: r.cache_ttl_sec === null ? null : Number(r.cache_ttl_sec),
+    cachePerPrincipal: Number(r.cache_per_principal) === 1,
   };
 }

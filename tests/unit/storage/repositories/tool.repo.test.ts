@@ -66,3 +66,46 @@ describe('ToolRepo', () => {
     expect(dbTools[0].canonicalName).toBe('db__a');
   });
 });
+
+describe('ToolRepo cache flags', () => {
+  let storage: SqliteAdapter;
+  beforeEach(async () => {
+    storage = await makeStorage();
+    await storage.servers.upsert({
+      name: 'db', transportType: 'streamable-http', transportConfig: { url: 'u' },
+    });
+    await storage.tools.replaceServerTools('db', [
+      { originalName: 'q', description: '', inputSchema: {} },
+    ]);
+  });
+  afterEach(async () => { await storage.close(); });
+
+  it('default flags are cacheable=false, ttl=null, perPrincipal=false', async () => {
+    const t = await storage.tools.findByCanonicalName('db__q');
+    expect(t?.cacheable).toBe(false);
+    expect(t?.cacheTtlSec).toBeNull();
+    expect(t?.cachePerPrincipal).toBe(false);
+  });
+
+  it('setCacheFlags updates all three', async () => {
+    await storage.tools.setCacheFlags('db__q', {
+      cacheable: true, cacheTtlSec: 60, cachePerPrincipal: true,
+    });
+    const t = await storage.tools.findByCanonicalName('db__q');
+    expect(t?.cacheable).toBe(true);
+    expect(t?.cacheTtlSec).toBe(60);
+    expect(t?.cachePerPrincipal).toBe(true);
+  });
+
+  it('setCacheFlags can clear cacheTtlSec by passing null', async () => {
+    await storage.tools.setCacheFlags('db__q', {
+      cacheable: true, cacheTtlSec: 60, cachePerPrincipal: false,
+    });
+    await storage.tools.setCacheFlags('db__q', {
+      cacheable: false, cacheTtlSec: null, cachePerPrincipal: false,
+    });
+    const t = await storage.tools.findByCanonicalName('db__q');
+    expect(t?.cacheable).toBe(false);
+    expect(t?.cacheTtlSec).toBeNull();
+  });
+});
