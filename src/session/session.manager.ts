@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
+import type { StorageAdapter } from "../storage/adapter.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "session-manager" });
@@ -104,6 +105,25 @@ export class SessionManager {
     }
 
     log.info({ server: serverName, transport: config.type }, "Session registered");
+  }
+
+  /**
+   * Load all enabled servers from storage and call register() for each.
+   * Called once on gateway startup, replacing config.servers iteration.
+   */
+  async loadFromStorage(storage: StorageAdapter): Promise<void> {
+    const servers = await storage.servers.list();
+    for (const s of servers) {
+      if (!s.enabled) continue;
+      // Reshape DB row (transportType + transportConfig fields) into the
+      // TransportConfig union shape that register() expects.
+      const transport = {
+        type: s.transportType,
+        ...s.transportConfig,
+      } as TransportConfig;
+      this.register(s.name, transport);
+    }
+    log.info({ count: servers.filter((s) => s.enabled).length }, "Loaded servers from storage");
   }
 
   /**
