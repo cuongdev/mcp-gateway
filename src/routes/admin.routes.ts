@@ -38,6 +38,7 @@ import type { GatewayVariables } from "../middleware/types.js";
 import type { GatewayConfig } from "../config/schema.js";
 import type { ToolRegistry } from "../registry/tool.registry.js";
 import type { ToolGroupManager } from "../registry/tool.groups.js";
+import type { PromptRegistry } from "../registry/prompt.registry.js";
 import type { SessionManager, TransportConfig } from "../session/session.manager.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { ServerTransportType } from "../storage/repositories/server.repo.js";
@@ -54,6 +55,7 @@ import { logger } from "../utils/logger.js";
 import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
 import { createUsersRoutes } from "./admin/users.routes.js";
 import { createTokensRoutes } from "./admin/tokens.routes.js";
+import { createPromptsRoutes } from "./admin/prompts.routes.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -63,6 +65,7 @@ interface AdminRouteDeps {
   toolRegistry: ToolRegistry;
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
+  promptRegistry: PromptRegistry;
 }
 
 /**
@@ -426,6 +429,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.route("/mcp-clients", createMcpClientsRoutes({ storage }));
   app.route("/users/me/tokens", createTokensRoutes({ storage }));
   app.route("/users", createUsersRoutes({ storage }));
+  app.route("/prompts", createPromptsRoutes({ promptRegistry: deps.promptRegistry }));
 
   return app;
 }

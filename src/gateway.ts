@@ -27,6 +27,7 @@ import { GatewayError } from "./types/errors.js";
 import { buildMiddlewarePipeline } from "./middleware/index.js";
 import { ToolRegistry } from "./registry/tool.registry.js";
 import { ToolGroupManager } from "./registry/tool.groups.js";
+import { PromptRegistry } from "./registry/prompt.registry.js";
 import { SessionManager } from "./session/session.manager.js";
 import { PolicyEngine } from "./middleware/authz/policy.engine.js";
 import { AuditLogger } from "./middleware/audit/audit.logger.js";
@@ -49,6 +50,7 @@ export class Gateway {
   // ── Core services ──────────────────────────────────
   private toolRegistry: ToolRegistry;
   private toolGroups: ToolGroupManager;
+  private promptRegistry: PromptRegistry;
   private sessionManager: SessionManager;
   private policyEngine: PolicyEngine;
   private auditLogger: AuditLogger;
@@ -61,6 +63,7 @@ export class Gateway {
     // Initialize core services backed by storage
     this.toolRegistry = new ToolRegistry(storage);
     this.toolGroups = new ToolGroupManager(storage, this.toolRegistry);
+    this.promptRegistry = new PromptRegistry(storage);
     this.sessionManager = new SessionManager();
     this.policyEngine = new PolicyEngine({
       storage,
@@ -108,6 +111,7 @@ export class Gateway {
       toolRegistry: this.toolRegistry,
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
+      promptRegistry: this.promptRegistry,
     });
     this.app.route(mcpPath, mcpRoutes);
 
@@ -126,6 +130,7 @@ export class Gateway {
       toolRegistry: this.toolRegistry,
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
+      promptRegistry: this.promptRegistry,
     });
     this.app.route(apiPath, adminRoutes);
 
@@ -184,6 +189,7 @@ export class Gateway {
     // Hydrate in-memory state from storage
     await this.toolRegistry.load();
     await this.toolGroups.load();
+    await this.promptRegistry.load();
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
 
@@ -249,6 +255,7 @@ export class Gateway {
   getApp() { return this.app; }
   getToolRegistry() { return this.toolRegistry; }
   getToolGroups() { return this.toolGroups; }
+  getPromptRegistry() { return this.promptRegistry; }
   getSessionManager() { return this.sessionManager; }
   getPolicyEngine() { return this.policyEngine; }
   getAuditLogger() { return this.auditLogger; }

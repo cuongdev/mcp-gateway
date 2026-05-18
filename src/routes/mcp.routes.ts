@@ -26,6 +26,7 @@ import {
 import { InvalidMessageError } from "../types/errors.js";
 import type { ToolRegistry, RegisteredTool } from "../registry/tool.registry.js";
 import type { ToolGroupManager } from "../registry/tool.groups.js";
+import type { PromptRegistry } from "../registry/prompt.registry.js";
 import type { SessionManager } from "../session/session.manager.js";
 import { logger } from "../utils/logger.js";
 
@@ -45,12 +46,27 @@ function listKnownServers(registry: ToolRegistry): string[] {
   return Array.from(set).sort();
 }
 
+/** Convert a JSON-schema-like object to MCP prompt `arguments` array. */
+function schemaToMCPArguments(
+  schema: Record<string, unknown>,
+): Array<{ name: string; description?: string; required?: boolean }> {
+  const properties =
+    (schema.properties as Record<string, { description?: string }> | undefined) ?? {};
+  const required = new Set((schema.required as string[] | undefined) ?? []);
+  return Object.entries(properties).map(([name, def]) => ({
+    name,
+    description: def.description,
+    required: required.has(name),
+  }));
+}
+
 const log = logger.child({ component: "mcp-routes" });
 
 interface MCPRouteDeps {
   toolRegistry: ToolRegistry;
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
+  promptRegistry: PromptRegistry;
 }
 
 /**
@@ -59,7 +75,7 @@ interface MCPRouteDeps {
  */
 export function createMCPRoutes(deps: MCPRouteDeps) {
   const app = new Hono<{ Variables: GatewayVariables }>();
-  const { toolRegistry, toolGroups, sessionManager } = deps;
+  const { toolRegistry, toolGroups, sessionManager, promptRegistry } = deps;
 
   // ── POST /mcp — Main MCP endpoint (all tools) ───────
   app.post("/", async (c) => {
@@ -77,6 +93,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       toolRegistry,
       toolGroups,
       sessionManager,
+      promptRegistry,
       undefined // no group filter
     );
 
@@ -136,6 +153,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       toolRegistry,
       toolGroups,
       sessionManager,
+      promptRegistry,
       groupName
     );
 
@@ -154,6 +172,7 @@ async function handleMCPRequest(
   registry: ToolRegistry,
   groups: ToolGroupManager,
   sessionManager: SessionManager,
+  promptRegistry: PromptRegistry,
   groupName: string | undefined
 ): Promise<JsonRpcResponse> {
   const { method, params, id } = request;
@@ -261,14 +280,35 @@ async function handleMCPRequest(
       return sessionManager.send(servers[0], request);
     }
 
-    // ── Prompts (pass-through) ───────────────────────
-    case MCP_METHODS.PROMPTS_LIST:
+    // ── Prompts ──────────────────────────────────────
+    case MCP_METHODS.PROMPTS_LIST: {
+      const prompts = promptRegistry.list();
+      return createSuccessResponse(id, {
+        prompts: prompts.map((p) => ({
+          name: p.canonicalName,
+          description: p.description,
+          arguments: schemaToMCPArguments(p.argumentsSchema),
+        })),
+      });
+    }
+
     case MCP_METHODS.PROMPTS_GET: {
-      const servers = listKnownServers(registry);
-      if (servers.length === 0) {
-        return createSuccessResponse(id, { prompts: [] });
+      const name = params?.name as string | undefined;
+      const prompt = name ? promptRegistry.get(name) : undefined;
+      if (!prompt || !prompt.enabled) {
+        return createErrorResponse(
+          id,
+          MCP_ERROR_CODES.INVALID_PARAMS,
+          `Prompt '${name ?? ""}' not found or disabled`
+        );
       }
-      return sessionManager.send(servers[0], request);
+      const upstreamRequest: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        id,
+        method: MCP_METHODS.PROMPTS_GET,
+        params: { ...(params ?? {}), name: prompt.originalName },
+      };
+      return sessionManager.send(prompt.serverName, upstreamRequest);
     }
 
     default:

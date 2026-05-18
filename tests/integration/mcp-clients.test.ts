@@ -4,6 +4,7 @@ import { makeStorage } from '../fixtures/helpers/make-storage.js';
 import type { SqliteAdapter } from '../../src/storage/sqlite.adapter.js';
 import { ToolRegistry } from '../../src/registry/tool.registry.js';
 import { ToolGroupManager } from '../../src/registry/tool.groups.js';
+import { PromptRegistry } from '../../src/registry/prompt.registry.js';
 import { SessionManager } from '../../src/session/session.manager.js';
 import { createAdminRoutes } from '../../src/routes/admin.routes.js';
 import { newId } from '../../src/utils/uuid.js';
@@ -28,6 +29,7 @@ async function setup() {
   app.use('*', bearerTokenMiddleware({ storage }));
   app.route('/api', createAdminRoutes({
     config: {} as never, storage, toolRegistry: registry, toolGroups: groups, sessionManager,
+    promptRegistry: new PromptRegistry(storage),
   }));
   return { app, storage, token: raw };
 }
