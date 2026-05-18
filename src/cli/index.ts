@@ -5,6 +5,8 @@ import { registerSeedCommand } from './commands/seed.js';
 import { registerRegisterCommand } from './commands/register.js';
 import { registerDeregisterCommand } from './commands/deregister.js';
 import { registerListCommand } from './commands/list.js';
+import { registerEnableDisableCommands } from './commands/enable.js';
+import { registerInvokeCommand } from './commands/invoke.js';
 
 async function main() {
   const program = new Command();
@@ -19,6 +21,8 @@ async function main() {
   registerRegisterCommand(program);
   registerDeregisterCommand(program);
   registerListCommand(program);
+  registerEnableDisableCommands(program);
+  registerInvokeCommand(program);
 
   await program.parseAsync(process.argv);
 }
