@@ -1,0 +1,23 @@
+{
+  "mode": "development",
+  "gateway": { "port": 3000, "host": "0.0.0.0", "mcpPath": "/mcp", "apiPath": "/api" },
+  "servers": [
+    {
+      "name": "fs",
+      "transport": { "type": "streamable-http", "url": "http://localhost:8001/mcp" },
+      "autoDiscover": true
+    },
+    {
+      "name": "db",
+      "transport": { "type": "streamable-http", "url": "http://localhost:8002/mcp" }
+    }
+  ],
+  "groups": [
+    {
+      "name": "data-analyst",
+      "description": "Read-only data tools",
+      "tools": ["db__query_data"],
+      "allowedRoles": ["analyst", "admin"]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ export interface Tx {
 export interface StorageAdapter {
   init(): Promise<void>;
   close(): Promise<void>;
+  execute(sql: string, params?: unknown[]): Promise<void>;
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
 
   principals: PrincipalRepo;

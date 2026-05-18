@@ -49,6 +49,10 @@ export class SqliteAdapter implements StorageAdapter {
     this.client.close();
   }
 
+  async execute(sql: string, params: unknown[] = []): Promise<void> {
+    await this.client.execute({ sql, args: params as never });
+  }
+
   async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     // Use manual BEGIN/COMMIT/ROLLBACK via client.execute() so that all statements
     // stay on the same underlying connection.  libsql's transaction() API hands off

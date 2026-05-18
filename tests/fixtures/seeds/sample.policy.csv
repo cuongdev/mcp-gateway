@@ -1,0 +1,4 @@
+p, admin, *, *
+p, analyst, tool:db__*, execute
+g, alice@example.com, admin
+g, admin, analyst
