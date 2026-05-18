@@ -73,6 +73,7 @@ export class Gateway {
   private quotaSweepInterval?: ReturnType<typeof setInterval>;
   private toolCache?: ToolCache;
   private approvalService?: ApprovalService;
+  private approvalSweepInterval?: ReturnType<typeof setInterval>;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -273,6 +274,10 @@ export class Gateway {
         toolRegistry: this.toolRegistry,
       }));
       this.app.route(`${apiPath}/approvals`, createApprovalsRoutes({ approvalService: this.approvalService }));
+      this.approvalSweepInterval = setInterval(async () => {
+        try { await this.approvalService!.expireOverdue(); } catch {}
+      }, 60_000);
+      this.approvalSweepInterval.unref?.();
       log.info({ path: mcpPath }, "Registered: Approval-gate middleware on MCP path");
     }
 
@@ -344,6 +349,10 @@ export class Gateway {
 
     if (this.quotaSweepInterval) {
       clearInterval(this.quotaSweepInterval);
+    }
+
+    if (this.approvalSweepInterval) {
+      clearInterval(this.approvalSweepInterval);
     }
 
     if (this.toolCache?.shutdown) {
