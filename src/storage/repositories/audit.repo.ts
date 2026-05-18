@@ -1,5 +1,20 @@
 import type { Client } from '@libsql/client';
 
+export interface UsageBucket {
+  key: string;
+  total: number;
+  success: number;
+  denied: number;
+  error: number;
+}
+
+export interface AggregateUsageOptions {
+  since?: number;
+  until?: number;
+  by: 'tool' | 'principal' | 'server';
+  action?: string;
+}
+
 export interface AuditEntry {
   id: string;
   ts: number;
@@ -57,6 +72,38 @@ export class AuditRepo {
       args: [action, limit],
     });
     return r.rows.map(rowToEntry);
+  }
+
+  async aggregateUsage(opts: AggregateUsageOptions): Promise<UsageBucket[]> {
+    const action = opts.action ?? 'tool.call';
+    const since = opts.since ?? 0;
+    const until = opts.until ?? Number.MAX_SAFE_INTEGER;
+    const keyExpr =
+      opts.by === 'tool' ? 'resource' :
+      opts.by === 'principal' ? 'principal_id' :
+      /* server */ `substr(resource, 1, instr(resource, '__') - 1)`;
+
+    const r = await this.client.execute({
+      sql: `
+        SELECT ${keyExpr} AS key, result, COUNT(*) AS n
+        FROM audit_logs
+        WHERE action = ? AND ts >= ? AND ts <= ?
+        GROUP BY key, result
+      `,
+      args: [action, since, until],
+    });
+    const buckets = new Map<string, UsageBucket>();
+    for (const row of r.rows) {
+      const key = (row.key as string | null) ?? '(none)';
+      const n = Number(row.n);
+      if (!buckets.has(key)) buckets.set(key, { key, total: 0, success: 0, denied: 0, error: 0 });
+      const b = buckets.get(key)!;
+      b.total += n;
+      if (row.result === 'success') b.success += n;
+      else if (row.result === 'denied') b.denied += n;
+      else b.error += n;
+    }
+    return Array.from(buckets.values()).sort((a, b) => b.total - a.total);
   }
 }
 
