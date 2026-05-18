@@ -14,6 +14,7 @@ import { CacheEntryRepo } from './repositories/cache-entry.repo.js';
 import { ApprovalRepo } from './repositories/approval.repo.js';
 import { WebhookRepo } from './repositories/webhook.repo.js';
 import { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
+import { TenantRepo } from './repositories/tenant.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -35,6 +36,7 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly approvals: ApprovalRepo;
   public readonly webhooks: WebhookRepo;
   public readonly webhookDeliveries: WebhookDeliveryRepo;
+  public readonly tenants: TenantRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -51,6 +53,7 @@ export class SqliteAdapter implements StorageAdapter {
     this.approvals = new ApprovalRepo(this.client);
     this.webhooks = new WebhookRepo(this.client);
     this.webhookDeliveries = new WebhookDeliveryRepo(this.client);
+    this.tenants = new TenantRepo(this.client);
   }
 
   async init(): Promise<void> {
