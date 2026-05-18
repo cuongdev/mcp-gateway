@@ -121,6 +121,23 @@ export const AuthorizationConfigSchema = z.object({
   }).default({}),
 });
 
+// ── Storage Schema ────────────────────────────────────
+
+export const StorageSchema = z.object({
+  driver: z.enum(["sqlite", "postgres"]).default("sqlite"),
+  path: z.string().default("./data/mcp.sqlite"),
+  url: z.string().nullable().default(null),       // P1: Postgres DATABASE_URL
+  authToken: z.string().nullable().default(null), // Turso (optional)
+}).default({});
+
+// ── Auth Schema ───────────────────────────────────────
+
+export const AuthSchema = z.object({
+  bearerTokenHeader: z.string().default("Authorization"),
+  requireAuthForApi: z.boolean().optional(),      // resolved by transform per mode
+  requireAuthForMcp: z.boolean().optional(),
+}).default({});
+
 // ── Audit Schema ──────────────────────────────────────
 
 export const AuditConfigSchema = z.object({
@@ -129,6 +146,8 @@ export const AuditConfigSchema = z.object({
   logPath: z.string().default("./logs/audit.jsonl"),
   maxFileSize: z.number().positive().default(10 * 1024 * 1024),
   retentionDays: z.number().positive().default(90),
+  fileExport: z.boolean().default(false),
+  fileExportPath: z.string().default("./logs/audit.jsonl"),
 });
 
 // ── Monitoring Schema ─────────────────────────────────
@@ -207,6 +226,18 @@ export const GatewayConfigSchema = z.object({
   audit: AuditConfigSchema.default({}),
 
   monitoring: MonitoringConfigSchema.default({}),
+
+  storage: StorageSchema,
+
+  auth: AuthSchema,
+}).transform((cfg) => {
+  if (cfg.auth.requireAuthForApi === undefined) {
+    cfg.auth.requireAuthForApi = cfg.mode !== "development";
+  }
+  if (cfg.auth.requireAuthForMcp === undefined) {
+    cfg.auth.requireAuthForMcp = cfg.mode !== "development";
+  }
+  return cfg;
 });
 
 // ── Derived Types ─────────────────────────────────────
@@ -221,3 +252,5 @@ export type AuditConfig = z.infer<typeof AuditConfigSchema>;
 export type MonitoringConfig = z.infer<typeof MonitoringConfigSchema>;
 export type ToolGroupConfig = z.infer<typeof ToolGroupSchema>;
 export type TransportConfig = z.infer<typeof TransportSchema>;
+export type StorageConfig = z.infer<typeof StorageSchema>;
+export type AuthConfig = z.infer<typeof AuthSchema>;
