@@ -39,6 +39,10 @@ import { rateLimitMiddleware } from "./middleware/rate-limit/rate-limit.middlewa
 import { QuotaService } from "./quota/index.js";
 import { quotaMiddleware } from "./middleware/quota/quota.middleware.js";
 import { dayScope } from "./quota/periods.js";
+import { createToolCache } from "./cache/index.js";
+import { cacheMiddleware } from "./middleware/cache/cache.middleware.js";
+import { createCacheRoutes } from "./routes/admin/cache.routes.js";
+import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -62,6 +66,7 @@ export class Gateway {
   private rateLimiter?: RateLimiter;
   private quotaService?: QuotaService;
   private quotaSweepInterval?: ReturnType<typeof setInterval>;
+  private toolCache?: ToolCache;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -132,6 +137,7 @@ export class Gateway {
     log.info({ providers: this.config.oidcProviders.map((p) => p.id) }, "Auth routes mounted at /auth");
 
     // ── Admin REST API (for developers) ──────────────
+    // Cache-dependent admin routes are mounted in start() after async cache init.
     const adminRoutes = createAdminRoutes({
       config: this.config,
       storage: this.storage,
@@ -227,6 +233,26 @@ export class Gateway {
       log.info({ path: mcpPath }, "Registered: Quota middleware on MCP path");
     }
 
+    // Mount cache middleware on MCP routes only (after quota).
+    if (this.config.cache.enabled) {
+      this.toolCache = await createToolCache(this.config.cache, this.storage);
+      const mcpPath = this.config.gateway.mcpPath;
+      const apiPath = this.config.gateway.apiPath;
+      this.app.use(`${mcpPath}/*`, cacheMiddleware({
+        cache: this.toolCache,
+        toolRegistry: this.toolRegistry,
+        defaultTtlSec: this.config.cache.defaultTtlSec,
+      }));
+      this.app.use(mcpPath, cacheMiddleware({
+        cache: this.toolCache,
+        toolRegistry: this.toolRegistry,
+        defaultTtlSec: this.config.cache.defaultTtlSec,
+      }));
+      // Mount the cache admin sub-routes at /api/cache.
+      this.app.route(`${apiPath}/cache`, createCacheRoutes({ cache: this.toolCache }));
+      log.info({ path: mcpPath, backend: this.config.cache.backend }, "Registered: Cache middleware on MCP path");
+    }
+
     // Start HTTP server
     const { port, host } = this.config.gateway;
 
@@ -287,6 +313,10 @@ export class Gateway {
 
     if (this.quotaSweepInterval) {
       clearInterval(this.quotaSweepInterval);
+    }
+
+    if (this.toolCache?.shutdown) {
+      await this.toolCache.shutdown();
     }
 
     log.info("Gateway shut down complete");

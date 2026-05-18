@@ -88,6 +88,20 @@ export const quotaExceeded = new Counter({
   registers: [metricsRegistry],
 });
 
+export const cacheHits = new Counter({
+  name: "mcp_cache_hits_total",
+  help: "Tool-call cache hits",
+  labelNames: ["tool"] as const,
+  registers: [metricsRegistry],
+});
+
+export const cacheMisses = new Counter({
+  name: "mcp_cache_misses_total",
+  help: "Tool-call cache misses (cacheable tool)",
+  labelNames: ["tool"] as const,
+  registers: [metricsRegistry],
+});
+
 export const upstreamLatency = new Histogram({
   name: "mcp_gateway_upstream_latency_seconds",
   help: "Upstream server response latency in seconds",

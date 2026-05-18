@@ -210,6 +210,16 @@ const RateLimitSchema = z.object({
   rules: z.array(RateLimitRuleSchema).default([]),
 }).default({});
 
+// ── Cache Schema ──────────────────────────────────────
+
+const CacheSchema = z.object({
+  enabled: z.boolean().default(true),
+  backend: z.enum(['memory', 'redis', 'sql']).default('memory'),
+  redisUrl: z.string().nullable().default(null),
+  maxEntries: z.number().int().positive().default(10000),
+  defaultTtlSec: z.number().int().positive().default(60),
+}).default({});
+
 // ── Session Schema ────────────────────────────────────
 
 export const SessionConfigSchema = z.object({
@@ -292,6 +302,8 @@ export const GatewayConfigSchema = z.object({
   rateLimit: RateLimitSchema,
 
   quota: QuotaSchema,
+
+  cache: CacheSchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
     cfg.auth.requireAuthForApi = cfg.mode !== "development";
@@ -327,3 +339,4 @@ export type StorageConfig = z.infer<typeof StorageSchema>;
 export type AuthConfig = z.infer<typeof AuthSchema>;
 export type RateLimitConfig = z.infer<typeof RateLimitSchema>;
 export type QuotaConfig = z.infer<typeof QuotaSchema>;
+export type CacheConfig = z.infer<typeof CacheSchema>;

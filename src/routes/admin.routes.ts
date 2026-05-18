@@ -57,6 +57,8 @@ import { createUsersRoutes } from "./admin/users.routes.js";
 import { createTokensRoutes } from "./admin/tokens.routes.js";
 import { createPromptsRoutes } from "./admin/prompts.routes.js";
 import { createUsageRoutes } from "./admin/usage.routes.js";
+import { createCacheRoutes } from "./admin/cache.routes.js";
+import type { ToolCache } from "../cache/interface.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -67,6 +69,8 @@ interface AdminRouteDeps {
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
   promptRegistry: PromptRegistry;
+  /** Optional — only present when cache.enabled */
+  cache?: ToolCache;
 }
 
 /**
@@ -471,6 +475,10 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.route("/users", createUsersRoutes({ storage }));
   app.route("/prompts", createPromptsRoutes({ promptRegistry: deps.promptRegistry }));
   app.route("/usage", createUsageRoutes({ storage }));
+
+  if (deps.cache) {
+    app.route("/cache", createCacheRoutes({ cache: deps.cache }));
+  }
 
   return app;
 }
