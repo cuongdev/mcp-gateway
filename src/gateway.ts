@@ -42,6 +42,8 @@ import { dayScope } from "./quota/periods.js";
 import { createToolCache } from "./cache/index.js";
 import { cacheMiddleware } from "./middleware/cache/cache.middleware.js";
 import { createCacheRoutes } from "./routes/admin/cache.routes.js";
+import { createRateLimitRoutes } from "./routes/admin/rate-limit.routes.js";
+import { createQuotaRoutes } from "./routes/admin/quota.routes.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 
@@ -251,6 +253,14 @@ export class Gateway {
       // Mount the cache admin sub-routes at /api/cache.
       this.app.route(`${apiPath}/cache`, createCacheRoutes({ cache: this.toolCache }));
       log.info({ path: mcpPath, backend: this.config.cache.backend }, "Registered: Cache middleware on MCP path");
+    }
+
+    // Mount rate-limit status admin endpoint at /api/rate-limit.
+    this.app.route(`${this.config.gateway.apiPath}/rate-limit`, createRateLimitRoutes({ config: this.config }));
+
+    // Mount quota status admin endpoint at /api/quota (only when quota is enabled).
+    if (this.quotaService) {
+      this.app.route(`${this.config.gateway.apiPath}/quota`, createQuotaRoutes({ quota: this.quotaService }));
     }
 
     // Start HTTP server
