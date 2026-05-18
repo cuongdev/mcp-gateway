@@ -5,6 +5,7 @@ import type { ToolRepo } from './repositories/tool.repo.js';
 import type { GroupRepo } from './repositories/group.repo.js';
 import type { PolicyRepo } from './repositories/policy.repo.js';
 import type { AuditRepo } from './repositories/audit.repo.js';
+import type { PromptRepo } from './repositories/prompt.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -25,4 +26,5 @@ export interface StorageAdapter {
   groups: GroupRepo;
   policies: PolicyRepo;
   audit: AuditRepo;
+  prompts: PromptRepo;
 }

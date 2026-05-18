@@ -8,6 +8,7 @@ import { ToolRepo } from './repositories/tool.repo.js';
 import { GroupRepo } from './repositories/group.repo.js';
 import { PolicyRepo } from './repositories/policy.repo.js';
 import { AuditRepo } from './repositories/audit.repo.js';
+import { PromptRepo } from './repositories/prompt.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -23,6 +24,7 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly groups: GroupRepo;
   public readonly policies: PolicyRepo;
   public readonly audit: AuditRepo;
+  public readonly prompts: PromptRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -33,6 +35,7 @@ export class SqliteAdapter implements StorageAdapter {
     this.groups = new GroupRepo(this.client);
     this.policies = new PolicyRepo(this.client);
     this.audit = new AuditRepo(this.client);
+    this.prompts = new PromptRepo(this.client);
   }
 
   async init(): Promise<void> {
