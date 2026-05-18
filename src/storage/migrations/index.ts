@@ -23,6 +23,8 @@ const MIGRATIONS: Array<{ version: number; name: string; file: string; dialect: 
   { version: 4, name: 'p3_approvals_webhooks', file: '0004_p3_approvals_webhooks.postgres.sql', dialect: 'postgres' },
   { version: 5, name: 'p3_openapi_transport', file: '0005_p3_openapi_transport.sqlite.sql', dialect: 'sqlite' },
   { version: 5, name: 'p3_openapi_transport', file: '0005_p3_openapi_transport.postgres.sql', dialect: 'postgres' },
+  { version: 6, name: 'p4_tenants', file: '0006_p4_tenants.sqlite.sql', dialect: 'sqlite' },
+  { version: 6, name: 'p4_tenants', file: '0006_p4_tenants.postgres.sql', dialect: 'postgres' },
 ];
 
 export function listMigrations(dialect: 'sqlite' | 'postgres' = 'sqlite'): MigrationFile[] {
