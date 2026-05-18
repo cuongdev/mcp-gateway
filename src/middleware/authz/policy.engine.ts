@@ -1,13 +1,18 @@
 // ============================================================
 // Authorization Middleware - Casbin Policy Engine
 // Supports RBAC, ABAC, and ReBAC models
+//
+// P0-T26: Policies are loaded from a PolicyRepo (StorageAdapter)
+// rather than from a CSV file. The CSV is reconstructed in memory
+// from DB rows and fed to Casbin via StringAdapter.
 // ============================================================
 
-import { newEnforcer, type Enforcer } from "casbin";
+import { newEnforcer, StringAdapter, type Enforcer } from "casbin";
 import type { MiddlewareHandler } from "hono";
 import type { AuthorizationConfig } from "../../config/schema.js";
 import type { GatewayVariables } from "../types.js";
 import type { AuthzDecision } from "../../types/gateway.js";
+import type { StorageAdapter } from "../../storage/adapter.js";
 import { AuthorizationError, ToolAccessDeniedError } from "../../types/errors.js";
 import { MCP_METHODS } from "../../types/mcp.js";
 import { logger } from "../../utils/logger.js";
@@ -20,11 +25,161 @@ const decisionCache = new Map<
   { allowed: boolean; expiresAt: number }
 >();
 
+// ============================================================
+// PolicyEngine — PolicyRepo-backed Casbin enforcer wrapper
+// ============================================================
+
+export interface PolicyEngineOptions {
+  storage: StorageAdapter;
+  modelFile: string;
+}
+
+/**
+ * Serialize a set of policy rules to Casbin CSV format.
+ * Each line: `<ptype>, <v0>, <v1>, ...`
+ */
+function policiesToCsv(
+  rules: Array<{ ptype: string; values: string[] }>
+): string {
+  return rules
+    .map((r) => [r.ptype, ...r.values].join(", "))
+    .join("\n");
+}
+
+/**
+ * Storage-backed Casbin policy engine.
+ *
+ * Loads policies from `storage.policies.list()` and feeds them to
+ * Casbin via an in-memory `StringAdapter`. Writes go to the
+ * `PolicyRepo` and then trigger a `reload()` so the enforcer's
+ * in-memory state stays in sync.
+ */
+export class PolicyEngine {
+  private enforcer!: Enforcer;
+
+  constructor(private readonly opts: PolicyEngineOptions) {}
+
+  /**
+   * Load policies from storage and build a fresh Casbin enforcer.
+   * Must be called once before any `enforce(...)` invocation.
+   */
+  async load(): Promise<void> {
+    const rules = await this.opts.storage.policies.list();
+    const csv = policiesToCsv(rules);
+    const adapter = new StringAdapter(csv);
+    this.enforcer = await newEnforcer(this.opts.modelFile, adapter);
+    decisionCache.clear();
+    log.info(
+      { model: this.opts.modelFile, rules: rules.length },
+      "PolicyEngine loaded from storage"
+    );
+  }
+
+  /**
+   * Re-read policies from storage. Used after writes and for
+   * external admin-triggered hot-reloads.
+   */
+  async reload(): Promise<void> {
+    await this.load();
+  }
+
+  /**
+   * Evaluate `(sub, obj, act)` against the loaded policies.
+   */
+  async enforce(sub: string, obj: string, act: string): Promise<boolean> {
+    if (!this.enforcer) {
+      throw new Error("PolicyEngine not loaded — call load() first");
+    }
+    return this.enforcer.enforce(sub, obj, act);
+  }
+
+  /**
+   * Direct access to the underlying Casbin enforcer (read-only callers
+   * such as response.filter.ts and tool.authorizer.ts).
+   */
+  getEnforcer(): Enforcer {
+    if (!this.enforcer) {
+      throw new Error("PolicyEngine not loaded — call load() first");
+    }
+    return this.enforcer;
+  }
+
+  // ── Admin / write-through helpers ─────────────────────
+  //
+  // These write to the PolicyRepo and then reload the enforcer
+  // so its in-memory state matches storage.
+
+  /** List all policy rules currently loaded into the enforcer. */
+  async listPolicies(): Promise<string[][]> {
+    if (!this.enforcer) {
+      throw new Error("PolicyEngine not loaded — call load() first");
+    }
+    return this.enforcer.getPolicy();
+  }
+
+  /** Append a `p, sub, obj, act` rule and reload. */
+  async addPolicy(sub: string, obj: string, act: string): Promise<boolean> {
+    await this.opts.storage.policies.append({
+      ptype: "p",
+      values: [sub, obj, act],
+    });
+    await this.reload();
+    return true;
+  }
+
+  /**
+   * Remove a `p, sub, obj, act` rule and reload.
+   *
+   * NOTE: `PolicyRepo` currently only exposes `append` and `replaceAll`,
+   * so removal is implemented as `list → filter → replaceAll`.
+   */
+  async removePolicy(sub: string, obj: string, act: string): Promise<boolean> {
+    const all = await this.opts.storage.policies.list();
+    const target = ["p", sub, obj, act].join("|");
+    const remaining = all.filter(
+      (r) => [r.ptype, ...r.values].join("|") !== target
+    );
+    const removed = remaining.length !== all.length;
+    if (removed) {
+      await this.opts.storage.policies.replaceAll(remaining);
+      await this.reload();
+    }
+    return removed;
+  }
+
+  /** Add a `g, user, role` grouping rule and reload. */
+  async addRoleForUser(user: string, role: string): Promise<boolean> {
+    await this.opts.storage.policies.append({
+      ptype: "g",
+      values: [user, role],
+    });
+    await this.reload();
+    return true;
+  }
+}
+
+// ============================================================
+// Module-level singleton + legacy function API
+//
+// Existing call sites (middleware/index.ts, response.filter.ts,
+// routes/admin.routes.ts) consume the function-based API below.
+// They will be migrated to receive a `PolicyEngine` instance via
+// constructor injection in a follow-up; until then the legacy
+// functions remain as thin wrappers around a module-level
+// Casbin enforcer.
+//
+// FLAG (T26 follow-up): wire `gateway.ts` to construct a
+// `PolicyEngine` with `{ storage, modelFile }` and pass it down
+// to `buildMiddlewarePipeline`, `createAdminRoutes`, and the
+// response filter, then remove the legacy file-based path here.
+// ============================================================
+
 let enforcer: Enforcer | null = null;
 
 /**
- * Initialize the Casbin enforcer.
- * Called once at startup.
+ * @deprecated Use `new PolicyEngine({ storage, modelFile }).load()`.
+ * Legacy file-adapter init kept for backward compatibility with
+ * existing call sites until they are migrated.
  */
 export async function initializeEnforcer(
   config: AuthorizationConfig
@@ -33,7 +188,7 @@ export async function initializeEnforcer(
 
   log.info(
     { model: config.modelFile, policy: config.policyFile },
-    "Initializing Casbin enforcer"
+    "Initializing Casbin enforcer (legacy file adapter)"
   );
 
   enforcer = await newEnforcer(config.modelFile, config.policyFile);
@@ -49,7 +204,7 @@ export function getEnforcer(): Enforcer | null {
 }
 
 /**
- * Reload policies from file (hot-reload).
+ * Reload policies from the legacy file source.
  */
 export async function reloadPolicies(): Promise<void> {
   if (!enforcer) throw new Error("Enforcer not initialized");
