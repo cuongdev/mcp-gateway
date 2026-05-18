@@ -23,6 +23,7 @@ import { sessionCookieMiddleware } from "./auth/session-cookie.middleware.js";
 import { createAuthzMiddleware } from "./authz/policy.engine.js";
 import { createAuditMiddleware } from "./audit/audit.middleware.js";
 import { createMetricsMiddleware } from "./monitoring/metrics.middleware.js";
+import { tenantMiddleware } from "./tenant/tenant.middleware.js";
 
 export interface PipelineDeps {
   storage: StorageAdapter;
@@ -39,6 +40,18 @@ export function buildMiddlewarePipeline(
   const log = logger.child({ component: "middleware-pipeline" });
   const mcpPath = config.gateway?.mcpPath ?? "/mcp";
   const apiPath = config.gateway?.apiPath ?? "/api";
+
+  // ── 0. Tenant resolution (all routes, before auth) ─
+  // Must be registered before routes so the tenant context is set for every
+  // request. Unknown slug → 404; suspended → configured HTTP status.
+  app.use("*", tenantMiddleware({
+    storage: deps.storage,
+    enabled: config.tenancy?.enabled ?? false,
+    headerName: config.tenancy?.headerName ?? "X-Tenant",
+    defaultSlug: config.tenancy?.defaultSlug ?? "default",
+    suspendedHttpStatus: config.tenancy?.suspendedHttpStatus ?? 402,
+  }));
+  log.info({ enabled: config.tenancy?.enabled ?? false }, "Registered: Tenant middleware");
 
   // ── 1. CORS (all routes) ───────────────────────────
   if (config.gateway?.corsOrigins) {

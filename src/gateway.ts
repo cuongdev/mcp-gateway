@@ -51,7 +51,6 @@ import { createWebhooksRoutes } from "./routes/admin/webhooks.routes.js";
 import { WebhookDispatcher } from "./notify/webhook.dispatcher.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
-import { tenantMiddleware } from "./middleware/tenant/tenant.middleware.js";
 import { createTenantsRoutes } from "./routes/admin/tenants.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -218,17 +217,6 @@ export class Gateway {
     await this.promptRegistry.load();
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
-
-    // Mount tenant middleware early (before bearer/session) so tenantId is
-    // available to all downstream layers, including auth and MCP routes.
-    this.app.use('*', tenantMiddleware({
-      storage: this.storage,
-      enabled: this.config.tenancy.enabled,
-      headerName: this.config.tenancy.headerName,
-      defaultSlug: this.config.tenancy.defaultSlug,
-      suspendedHttpStatus: this.config.tenancy.suspendedHttpStatus,
-    }));
-    log.info({ enabled: this.config.tenancy.enabled }, "Registered: Tenant middleware");
 
     // System tenant admin routes — available regardless of tenancy.enabled.
     this.app.route(`${this.config.gateway.apiPath}/system/tenants`, createTenantsRoutes({ storage: this.storage }));

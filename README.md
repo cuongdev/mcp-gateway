@@ -158,6 +158,17 @@ g, analyst, user
 g, alice@example.com, admin
 ```
 
+## What's New in v0.6.0-p4
+
+- **Multi-tenant foundation** — `tenants` table with `tnt_default` row auto-created at migration. Existing single-tenant data backfills automatically.
+- **Tenant resolution middleware** — pass `X-Tenant: <slug>` header to scope requests. Unknown slug → 404, suspended → 402.
+- **System admin API** — `POST/GET /api/system/tenants`, `PATCH /:id`, `POST /:id/suspend`, `POST /:id/resume`.
+- **CLI** — `mcp-gateway tenant create <slug> [--plan pro]`, `tenant list`, `tenant suspend <id>`, `tenant resume <id>`.
+- **`tenant_id` columns** added to `principals`, `servers`, `tools`, `audit_logs`, `usage_counters` (backfilled to `tnt_default`).
+- **No subdomain routing** in v1 — use a reverse proxy that maps `acme.gateway.example.com` to header `X-Tenant: acme`.
+- **Deferred (backlog):** Postgres row-level security, Casbin domain-RBAC migration, per-plan quota tiers, tenant-scoped OIDC providers, tenant memberships (cross-tenant principal), repo-layer tenant guard enforcement, data export tooling, billing hooks.
+- **Build stability:** all existing repo methods continue to work without modification because every new `tenant_id` column has `DEFAULT 'tnt_default'`. Multi-tenant deployments should add repo-layer scoping in a follow-up before production use.
+
 ## What's New in v0.5.0-p3
 
 - **Approval workflow** — mark a tool `sensitive` → gate middleware returns `202 approval_required` with `approval_id`; admin approves via `/api/approvals/:id/approve` or `mcp-gateway approval approve <id>`; caller reissues with `X-MCP-Approval-Id` header for execution.
