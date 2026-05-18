@@ -1,134 +1,131 @@
 // ============================================================
 // Audit Logger
-// Persists audit entries to file (JSONL format) or console
+// Primary target: AuditRepo (DB)
+// Optional secondary: JSONL file export when fileExport=true
+// Legacy "console" storage mode preserved.
 // ============================================================
 
-import { appendFileSync, mkdirSync, existsSync, statSync, renameSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { AuditConfig } from "../../config/schema.js";
+import type { StorageAdapter } from "../../storage/adapter.js";
+import type { NewAuditEntry } from "../../storage/repositories/audit.repo.js";
 import type { AuditEntry } from "../../types/gateway.js";
 import { logger } from "../../utils/logger.js";
+import { newId } from "../../utils/uuid.js";
 
 const log = logger.child({ component: "audit-logger" });
 
+export interface AuditLoggerOptions {
+  /** Storage adapter (provides AuditRepo via storage.audit). */
+  storage: StorageAdapter;
+  /** Audit config (file export flags, legacy storage mode, etc). */
+  config: AuditConfig;
+}
+
 export class AuditLogger {
-  private config: AuditConfig;
-  private buffer: string[] = [];
-  private flushInterval: NodeJS.Timeout | null = null;
-  private currentFileSize = 0;
+  private readonly storage: StorageAdapter;
+  private readonly config: AuditConfig;
+  private fileReady = false;
 
-  constructor(config: AuditConfig) {
-    this.config = config;
-
-    if (config.storage === "file") {
-      this.ensureLogDirectory();
-      this.initFileSize();
-
-      // Flush buffer every 5 seconds
-      this.flushInterval = setInterval(() => this.flush(), 5000);
-    }
+  constructor(opts: AuditLoggerOptions) {
+    this.storage = opts.storage;
+    this.config = opts.config;
   }
 
   /**
    * Log an audit entry.
-   * Entries are buffered and flushed periodically for performance.
+   * Always writes to AuditRepo (DB). Optionally appends a JSONL line when
+   * `fileExport=true`. Failures in either path are logged but never thrown,
+   * so audit writes can never break the request path.
    */
   async log(entry: AuditEntry): Promise<void> {
-    const line = JSON.stringify(entry);
+    // ── Primary: write to AuditRepo (DB) ─────────────
+    const id = entry.id || newId();
+    const repoEntry: NewAuditEntry = {
+      id,
+      principalId: entry.userId,
+      principalType: entry.userOrg ? "user" : undefined,
+      action: entry.action,
+      resource: entry.toolName ?? entry.targetServer,
+      result: mapResult(entry.result.status, entry.authorization.decision),
+      durationMs: Math.round(entry.result.responseTimeMs),
+      metadata: {
+        requestId: entry.requestId,
+        userEmail: entry.userEmail,
+        userOrg: entry.userOrg,
+        method: entry.method,
+        toolName: entry.toolName,
+        targetServer: entry.targetServer,
+        authorization: entry.authorization,
+        errorCode: entry.result.errorCode,
+        errorMessage: entry.result.errorMessage,
+        ...entry.metadata,
+      },
+    };
 
-    switch (this.config.storage) {
-      case "file":
-        this.buffer.push(line);
-        // Flush immediately if buffer is large
-        if (this.buffer.length >= 100) {
-          await this.flush();
-        }
-        break;
+    try {
+      await this.storage.audit.write(repoEntry);
+    } catch (err) {
+      // Never let audit DB write failures break the request path.
+      log.error({ err }, "Failed to write audit entry to AuditRepo");
+    }
 
-      case "console":
-        log.info({ audit: entry }, "Audit entry");
-        break;
+    // ── Legacy: console storage mode ─────────────────
+    if (this.config.storage === "console") {
+      log.info({ audit: entry }, "Audit entry");
+    }
 
-      case "custom":
-        // Custom storage can be implemented via plugin
-        break;
+    // ── Secondary: optional JSONL file export ────────
+    if (this.config.fileExport && this.config.fileExportPath) {
+      await this.appendJsonl(this.config.fileExportPath, { ...entry, id });
     }
   }
 
   /**
-   * Flush buffered entries to file.
+   * Append a single JSON line to the configured export file.
+   * Ensures the parent directory exists on first write.
+   */
+  private async appendJsonl(path: string, entry: AuditEntry): Promise<void> {
+    try {
+      if (!this.fileReady) {
+        await mkdir(dirname(path), { recursive: true });
+        this.fileReady = true;
+      }
+      const line = JSON.stringify(entry) + "\n";
+      await appendFile(path, line, "utf-8");
+    } catch (err) {
+      log.error({ err, path }, "Failed to append audit entry to JSONL file");
+    }
+  }
+
+  /**
+   * No-op flush, preserved for backward compatibility with the previous
+   * buffered file writer. DB writes are immediate; file writes are
+   * fire-and-forget per call.
    */
   async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
-
-    const entries = this.buffer.splice(0);
-    const data = entries.join("\n") + "\n";
-
-    try {
-      // Check if rotation is needed
-      if (this.currentFileSize + data.length > this.config.maxFileSize) {
-        this.rotateLog();
-      }
-
-      appendFileSync(this.config.logPath, data, "utf-8");
-      this.currentFileSize += data.length;
-    } catch (err) {
-      log.error({ err }, "Failed to write audit log file");
-      // Put entries back in buffer
-      this.buffer.unshift(...entries);
-    }
+    // intentionally empty
   }
 
   /**
-   * Rotate log file when it exceeds max size.
-   */
-  private rotateLog(): void {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const rotatedPath = `${this.config.logPath}.${timestamp}`;
-
-    try {
-      if (existsSync(this.config.logPath)) {
-        renameSync(this.config.logPath, rotatedPath);
-        log.info({ from: this.config.logPath, to: rotatedPath }, "Rotated audit log");
-      }
-      this.currentFileSize = 0;
-    } catch (err) {
-      log.error({ err }, "Failed to rotate audit log");
-    }
-  }
-
-  /**
-   * Ensure the log directory exists.
-   */
-  private ensureLogDirectory(): void {
-    const dir = dirname(this.config.logPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-      log.info({ dir }, "Created audit log directory");
-    }
-  }
-
-  /**
-   * Initialize current file size tracking.
-   */
-  private initFileSize(): void {
-    try {
-      if (existsSync(this.config.logPath)) {
-        this.currentFileSize = statSync(this.config.logPath).size;
-      }
-    } catch {
-      this.currentFileSize = 0;
-    }
-  }
-
-  /**
-   * Graceful shutdown — flush remaining entries.
+   * Graceful shutdown — preserved for backward compatibility.
    */
   async shutdown(): Promise<void> {
-    if (this.flushInterval) {
-      clearInterval(this.flushInterval);
-    }
     await this.flush();
     log.info("Audit logger shut down");
   }
+}
+
+/**
+ * Map the gateway's rich result/authorization shape to the repo's
+ * compact `'success' | 'denied' | 'error'` enum.
+ */
+function mapResult(
+  status: AuditEntry["result"]["status"],
+  decision: AuditEntry["authorization"]["decision"],
+): NewAuditEntry["result"] {
+  if (decision === "DENY") return "denied";
+  if (status === "error" || status === "timeout") return "error";
+  return "success";
 }
