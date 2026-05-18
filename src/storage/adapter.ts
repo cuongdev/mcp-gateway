@@ -9,6 +9,8 @@ import type { PromptRepo } from './repositories/prompt.repo.js';
 import type { UsageCounterRepo } from './repositories/usage-counter.repo.js';
 import type { CacheEntryRepo } from './repositories/cache-entry.repo.js';
 import type { ApprovalRepo } from './repositories/approval.repo.js';
+import type { WebhookRepo } from './repositories/webhook.repo.js';
+import type { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -33,4 +35,6 @@ export interface StorageAdapter {
   usage: UsageCounterRepo;
   cache: CacheEntryRepo;
   approvals: ApprovalRepo;
+  webhooks: WebhookRepo;
+  webhookDeliveries: WebhookDeliveryRepo;
 }

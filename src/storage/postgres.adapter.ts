@@ -11,6 +11,8 @@ import { PromptRepo } from './repositories/prompt.repo.js';
 import { UsageCounterRepo } from './repositories/usage-counter.repo.js';
 import { CacheEntryRepo } from './repositories/cache-entry.repo.js';
 import { ApprovalRepo } from './repositories/approval.repo.js';
+import { WebhookRepo } from './repositories/webhook.repo.js';
+import { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
 import { listMigrations } from './migrations/index.js';
 
 export interface PostgresAdapterOptions {
@@ -40,6 +42,8 @@ export class PostgresAdapter implements StorageAdapter {
   public readonly usage: UsageCounterRepo;
   public readonly cache: CacheEntryRepo;
   public readonly approvals: ApprovalRepo;
+  public readonly webhooks: WebhookRepo;
+  public readonly webhookDeliveries: WebhookDeliveryRepo;
 
   constructor(opts: PostgresAdapterOptions) {
     this.sql = postgres(opts.url, { onnotice: () => undefined });
@@ -58,6 +62,8 @@ export class PostgresAdapter implements StorageAdapter {
     this.usage      = new UsageCounterRepo(this.client as never);
     this.cache      = new CacheEntryRepo(this.client as never);
     this.approvals  = new ApprovalRepo(this.client as never);
+    this.webhooks   = new WebhookRepo(this.client as never);
+    this.webhookDeliveries = new WebhookDeliveryRepo(this.client as never);
   }
 
   async init(): Promise<void> {
