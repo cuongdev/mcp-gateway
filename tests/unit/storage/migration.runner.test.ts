@@ -12,12 +12,12 @@ describe('MigrationRunner', () => {
   it('applies pending migrations and records them', async () => {
     const runner = new MigrationRunner(client, 'sqlite');
     const applied = await runner.up();
-    expect(applied.length).toBe(2);
+    expect(applied.length).toBe(3);
     expect(applied[0].version).toBe(1);
     expect(applied[1].version).toBe(2);
 
     const rows = await client.execute('SELECT * FROM schema_migrations ORDER BY version');
-    expect(rows.rows.length).toBe(2);
+    expect(rows.rows.length).toBe(3);
     expect(rows.rows[0].version).toBe(1);
     expect(rows.rows[1].version).toBe(2);
   });
@@ -33,11 +33,11 @@ describe('MigrationRunner', () => {
     const runner = new MigrationRunner(client, 'sqlite');
     let status = await runner.status();
     expect(status.applied).toEqual([]);
-    expect(status.pending.map((m) => m.version)).toEqual([1, 2]);
+    expect(status.pending.map((m) => m.version)).toEqual([1, 2, 3]);
 
     await runner.up();
     status = await runner.status();
-    expect(status.applied).toEqual([1, 2]);
+    expect(status.applied).toEqual([1, 2, 3]);
     expect(status.pending).toEqual([]);
   });
 });
