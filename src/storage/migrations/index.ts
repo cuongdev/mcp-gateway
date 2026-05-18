@@ -19,6 +19,8 @@ const MIGRATIONS: Array<{ version: number; name: string; file: string; dialect: 
   { version: 2, name: 'p1_prompts_groups', file: '0002_p1_prompts_groups.postgres.sql', dialect: 'postgres' },
   { version: 3, name: 'p2_usage_cache', file: '0003_p2_usage_cache.sqlite.sql', dialect: 'sqlite' },
   { version: 3, name: 'p2_usage_cache', file: '0003_p2_usage_cache.postgres.sql', dialect: 'postgres' },
+  { version: 4, name: 'p3_approvals_webhooks', file: '0004_p3_approvals_webhooks.sqlite.sql', dialect: 'sqlite' },
+  { version: 4, name: 'p3_approvals_webhooks', file: '0004_p3_approvals_webhooks.postgres.sql', dialect: 'postgres' },
 ];
 
 export function listMigrations(dialect: 'sqlite' | 'postgres' = 'sqlite'): MigrationFile[] {
