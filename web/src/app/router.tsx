@@ -10,6 +10,9 @@ import { ServerNewSheet } from '@/features/servers/new-sheet';
 import { ServerDetailSheet } from '@/features/servers/detail-sheet';
 import { ToolsPage } from '@/features/tools/page';
 import { ToolDetailSheet } from '@/features/tools/detail-sheet';
+import { GroupsPage } from '@/features/groups/page';
+import { GroupNewSheet } from '@/features/groups/new-sheet';
+import { GroupDetailSheet } from '@/features/groups/detail-sheet';
 
 export function App() {
   return (
@@ -29,7 +32,10 @@ export function App() {
               <Route path="/tools" element={<ToolsPage />}>
                 <Route path=":canonicalName" element={<ToolDetailSheet />} />
               </Route>
-              <Route path="/groups/*" element={<ComingSoon phase="B" title="Tool Groups" />} />
+              <Route path="/groups" element={<GroupsPage />}>
+                <Route path="new" element={<GroupNewSheet />} />
+                <Route path=":name" element={<GroupDetailSheet />} />
+              </Route>
               <Route path="/prompts" element={<ComingSoon phase="C" title="Prompts" />} />
               <Route path="/proxies/*" element={<ComingSoon phase="E" title="Outbound Proxies" />} />
               {/* IDENTITY */}
