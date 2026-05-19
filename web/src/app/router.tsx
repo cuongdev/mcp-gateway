@@ -22,6 +22,7 @@ import { McpClientNewSheet } from '@/features/mcp-clients/new-sheet';
 import { McpClientDetailSheet } from '@/features/mcp-clients/detail-sheet';
 import { MyTokensPage } from '@/features/my-tokens/page';
 import { MyTokenNewSheet } from '@/features/my-tokens/new-sheet';
+import { PromptsPage } from '@/features/prompts/page';
 
 export function App() {
   return (
@@ -45,7 +46,7 @@ export function App() {
                 <Route path="new" element={<GroupNewSheet />} />
                 <Route path=":name" element={<GroupDetailSheet />} />
               </Route>
-              <Route path="/prompts" element={<ComingSoon phase="C" title="Prompts" />} />
+              <Route path="/prompts" element={<PromptsPage />} />
               <Route path="/proxies/*" element={<ComingSoon phase="E" title="Outbound Proxies" />} />
               {/* IDENTITY */}
               <Route path="/users" element={<UsersPage />}>
