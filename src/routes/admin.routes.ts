@@ -419,6 +419,10 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         originalName: t.originalName,
         description: t.description,
         enabled: t.enabled,
+        cacheable: t.cacheable,
+        cacheTtlSec: t.cacheTtlSec,
+        cachePerPrincipal: t.cachePerPrincipal,
+        sensitive: t.sensitive,
       })),
       total: tools.length,
     });
