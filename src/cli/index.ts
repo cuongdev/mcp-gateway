@@ -22,6 +22,7 @@ import { registerRateLimitCommand } from './commands/rate-limit.js';
 import { registerApprovalCommand } from './commands/approval.js';
 import { registerWebhookCommand } from './commands/webhook.js';
 import { registerTenantCommand } from './commands/tenant.js';
+import { registerProxyCommand } from './commands/proxy.js';
 
 async function main() {
   const program = new Command();
@@ -53,6 +54,7 @@ async function main() {
   registerApprovalCommand(program);
   registerWebhookCommand(program);
   registerTenantCommand(program);
+  registerProxyCommand(program);
 
   await program.parseAsync(process.argv);
 }
