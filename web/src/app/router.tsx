@@ -5,6 +5,9 @@ import { LoginPage } from './auth/login';
 import { Shell } from './layout/shell';
 import { ComingSoon } from './coming-soon';
 import { OverviewPage } from '@/features/overview/page';
+import { ServersPage } from '@/features/servers/page';
+import { ServerNewSheet } from '@/features/servers/new-sheet';
+import { ServerDetailSheet } from '@/features/servers/detail-sheet';
 
 export function App() {
   return (
@@ -17,7 +20,10 @@ export function App() {
               <Route index element={<Navigate to="/overview" replace />} />
               <Route path="/overview" element={<OverviewPage />} />
               {/* ROUTING */}
-              <Route path="/servers/*" element={<ComingSoon phase="B" title="Servers" />} />
+              <Route path="/servers" element={<ServersPage />}>
+                <Route path="new" element={<ServerNewSheet />} />
+                <Route path=":name" element={<ServerDetailSheet />} />
+              </Route>
               <Route path="/tools/*" element={<ComingSoon phase="B" title="Tools" />} />
               <Route path="/groups/*" element={<ComingSoon phase="B" title="Tool Groups" />} />
               <Route path="/prompts" element={<ComingSoon phase="C" title="Prompts" />} />
