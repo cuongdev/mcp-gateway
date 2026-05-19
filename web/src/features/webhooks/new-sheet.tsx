@@ -7,14 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChipInput } from '@/components/chip-input';
-import { useCreateWebhook } from './api';
-
-const KNOWN_EVENTS = [
-  'approval.requested',
-  'approval.approved',
-  'approval.rejected',
-  'approval.expired',
-];
+import { useCreateWebhook, useWebhookEvents } from './api';
 
 export function WebhookNewSheet() {
   const navigate = useNavigate();
@@ -25,6 +18,8 @@ export function WebhookNewSheet() {
   const [secret, setSecret] = useState('');
   const [events, setEvents] = useState<string[]>([]);
   const create = useCreateWebhook();
+  const { data: eventsData } = useWebhookEvents();
+  const knownEvents = eventsData?.events ?? [];
 
   const submit = async () => {
     try {
@@ -60,8 +55,8 @@ export function WebhookNewSheet() {
           </div>
           <div className="space-y-1.5">
             <Label>Events (leave empty for all)</Label>
-            <ChipInput value={events} onChange={setEvents} placeholder={KNOWN_EVENTS.join(', ')} ariaLabel="events" />
-            <p className="text-xs text-muted-foreground">Common: {KNOWN_EVENTS.map((e) => <code key={e} className="mr-1 font-mono">{e}</code>)}</p>
+            <ChipInput value={events} onChange={setEvents} placeholder={knownEvents.join(', ')} ariaLabel="events" />
+            <p className="text-xs text-muted-foreground">Common: {knownEvents.map((e) => <code key={e} className="mr-1 font-mono">{e}</code>)}</p>
           </div>
         </div>
 

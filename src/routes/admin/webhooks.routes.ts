@@ -19,6 +19,17 @@ export function createWebhooksRoutes(deps: WebhooksRoutesDeps) {
 
   app.get('/', async (c) => c.json({ webhooks: await deps.storage.webhooks.list() }));
 
+  const KNOWN_EVENTS = [
+    'approval.requested',
+    'approval.approved',
+    'approval.rejected',
+    'approval.expired',
+  ];
+
+  app.get('/events', (c) => {
+    return c.json({ events: KNOWN_EVENTS });
+  });
+
   app.post('/', async (c) => {
     const body = z.object({
       name: z.string().min(1),

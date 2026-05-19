@@ -35,3 +35,11 @@ export function useDeleteWebhook() {
     onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
   });
 }
+
+export function useWebhookEvents() {
+  return useQuery({
+    queryKey: ['webhooks', 'events'] as const,
+    queryFn: () => api<{ events: string[] }>('/api/webhooks/events'),
+    staleTime: 60 * 60 * 1000,  // 1 hour
+  });
+}
