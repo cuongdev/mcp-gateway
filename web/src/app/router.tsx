@@ -36,6 +36,7 @@ const MyTokenNewSheet = lazy(() => import('@/features/my-tokens/new-sheet').then
 const PromptsPage = lazy(() => import('@/features/prompts/page').then((m) => ({ default: m.PromptsPage })));
 const OidcProvidersPage = lazy(() => import('@/features/oidc/page').then((m) => ({ default: m.OidcProvidersPage })));
 const RateLimitPage = lazy(() => import('@/features/rate-limit/page').then((m) => ({ default: m.RateLimitPage })));
+const QuotaPage = lazy(() => import('@/features/quota/page').then((m) => ({ default: m.QuotaPage })));
 
 function RouteSuspenseFallback() {
   return (
@@ -86,7 +87,7 @@ export function App() {
                 <Route path="/policies" element={<PoliciesPage />} />
                 {/* RELIABILITY */}
                 <Route path="/rate-limit" element={<RateLimitPage />} />
-                <Route path="/quota" element={<ComingSoon phase="D" title="Quota" />} />
+                <Route path="/quota" element={<QuotaPage />} />
                 <Route path="/cache" element={<ComingSoon phase="D" title="Cache" />} />
                 <Route path="/approvals" element={<ComingSoon phase="D" title="Approvals" />} />
                 {/* OBSERVABILITY */}
