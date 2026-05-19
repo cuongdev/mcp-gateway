@@ -20,6 +20,8 @@ import { UserDetailSheet } from '@/features/users/detail-sheet';
 import { McpClientsPage } from '@/features/mcp-clients/page';
 import { McpClientNewSheet } from '@/features/mcp-clients/new-sheet';
 import { McpClientDetailSheet } from '@/features/mcp-clients/detail-sheet';
+import { MyTokensPage } from '@/features/my-tokens/page';
+import { MyTokenNewSheet } from '@/features/my-tokens/new-sheet';
 
 export function App() {
   return (
@@ -54,7 +56,9 @@ export function App() {
                 <Route path="new" element={<McpClientNewSheet />} />
                 <Route path=":id" element={<McpClientDetailSheet />} />
               </Route>
-              <Route path="/my-tokens" element={<ComingSoon phase="C" title="My Tokens" />} />
+              <Route path="/my-tokens" element={<MyTokensPage />}>
+                <Route path="new" element={<MyTokenNewSheet />} />
+              </Route>
               <Route path="/oidc" element={<ComingSoon phase="C" title="OIDC Providers" />} />
               <Route path="/policies" element={<PoliciesPage />} />
               {/* RELIABILITY */}
