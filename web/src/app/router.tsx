@@ -4,7 +4,6 @@ import { Providers } from './providers';
 import { AuthGate } from './auth/auth-gate';
 import { LoginPage } from './auth/login';
 import { Shell } from './layout/shell';
-import { ComingSoon } from './coming-soon';
 
 // Lazy feature pages
 const OverviewPage = lazy(() => import('@/features/overview/page').then((m) => ({ default: m.OverviewPage })));
@@ -51,6 +50,10 @@ const TenantsPage = lazy(() => import('@/features/tenants/page').then((m) => ({ 
 const TenantNewSheet = lazy(() => import('@/features/tenants/new-sheet').then((m) => ({ default: m.TenantNewSheet })));
 const TenantDetailSheet = lazy(() => import('@/features/tenants/detail-sheet').then((m) => ({ default: m.TenantDetailSheet })));
 
+const ProxiesPage = lazy(() => import('@/features/proxies/page').then((m) => ({ default: m.ProxiesPage })));
+const ProxyNewSheet = lazy(() => import('@/features/proxies/new-sheet').then((m) => ({ default: m.ProxyNewSheet })));
+const ProxyDetailSheet = lazy(() => import('@/features/proxies/detail-sheet').then((m) => ({ default: m.ProxyDetailSheet })));
+
 function RouteSuspenseFallback() {
   return (
     <div className="flex h-full items-center justify-center py-24">
@@ -83,7 +86,10 @@ export function App() {
                   <Route path=":name" element={<GroupDetailSheet />} />
                 </Route>
                 <Route path="/prompts" element={<PromptsPage />} />
-                <Route path="/proxies/*" element={<ComingSoon phase="E" title="Outbound Proxies" />} />
+                <Route path="/proxies" element={<ProxiesPage />}>
+                  <Route path="new" element={<ProxyNewSheet />} />
+                  <Route path=":id" element={<ProxyDetailSheet />} />
+                </Route>
                 {/* IDENTITY */}
                 <Route path="/users" element={<UsersPage />}>
                   <Route path="new" element={<UserNewSheet />} />
