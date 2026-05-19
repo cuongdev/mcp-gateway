@@ -59,6 +59,7 @@ import { createPromptsRoutes } from "./admin/prompts.routes.js";
 import { createUsageRoutes } from "./admin/usage.routes.js";
 import { createCacheRoutes } from "./admin/cache.routes.js";
 import type { ToolCache } from "../cache/interface.js";
+import type { ProxyRegistry } from "../proxy/registry.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -71,6 +72,15 @@ interface AdminRouteDeps {
   promptRegistry: PromptRegistry;
   /** Optional — only present when cache.enabled */
   cache?: ToolCache;
+  /**
+   * Optional ProxyRegistry — when present, POST /servers with `proxyName`
+   * resolves the dispatcher and passes it to the OpenAPI adapter at
+   * construction time (P5).
+   *
+   * May be a function so the gateway can pass a late-bound reference
+   * (admin routes are constructed before ProxyRegistry is initialized).
+   */
+  proxyRegistry?: ProxyRegistry | (() => ProxyRegistry | undefined);
 }
 
 /**
@@ -131,6 +141,8 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         auth?: { type?: "bearer" | "apiKey"; token?: string; headerName?: string };
         filter?: { tags?: string[]; operationIds?: string[]; exclude?: string[] };
       };
+      /** Optional outbound proxy override (P5). */
+      proxyName?: string | null;
     };
 
     if (!body.name || !body.transport) {
@@ -221,6 +233,9 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
           transportConfig: openapiTransport as unknown as Record<string, unknown>,
           autoDiscover: false,
         });
+        if (body.proxyName !== undefined) {
+          await storage.servers.setProxyName(body.name, body.proxyName);
+        }
         await storage.tools.replaceServerTools(
           body.name,
           loaded.tools.map((t) => ({
@@ -238,10 +253,20 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       const { OpenApiAdapter } = await import("../adapters/openapi/adapter.js");
       sessionManager.clearOpenApiToolsForServer(body.name);
       sessionManager.markOpenApiServer(body.name);
+      // Look up outbound proxy dispatcher for this server (P5). NOTE: the
+      // dispatcher is captured at construction time — PATCH'ing proxyName
+      // later does NOT refresh the adapter; re-register the server.
+      const resolvedProxyRegistry = typeof deps.proxyRegistry === "function"
+        ? deps.proxyRegistry()
+        : deps.proxyRegistry;
+      const openapiDispatcher = body.proxyName && resolvedProxyRegistry
+        ? resolvedProxyRegistry.get(body.proxyName) ?? undefined
+        : undefined;
       const adapter = new OpenApiAdapter(
         openapiTransport,
         openapiCfg,
         loaded.baseUrl,
+        openapiDispatcher,
       );
       for (const t of loaded.tools) {
         sessionManager.registerOpenApiTool(
@@ -271,6 +296,9 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         transportType: body.transport.type as ServerTransportType,
         transportConfig: body.transport as unknown as Record<string, unknown>,
       });
+      if (body.proxyName !== undefined) {
+        await storage.servers.setProxyName(body.name, body.proxyName);
+      }
     } catch (err) {
       log.error({ server: body.name, err }, "Failed to persist server");
       return c.json({ error: "Failed to persist server" }, 500);

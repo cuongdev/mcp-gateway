@@ -13,14 +13,20 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import type { Dispatcher } from "undici";
 import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
 import type { OpenApiAdapter } from "../adapters/openapi/adapter.js";
 import type { DiscoveredOpenApiTool } from "../adapters/openapi/operation-to-tool.js";
+import type { ProxyRegistry } from "../proxy/registry.js";
+import { resolveProxyName } from "../proxy/resolver.js";
 import { withSpan, currentTraceparent } from "../observability/spans.js";
-import { upstreamLatency } from "../middleware/monitoring/metrics.middleware.js";
+import {
+  upstreamLatency,
+  proxyRequestsTotal,
+} from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
 
 const log = logger.child({ component: "session-manager" });
@@ -131,6 +137,19 @@ export class SessionManager {
   /** Periodic cleanup interval for idle sessions */
   private cleanupInterval?: ReturnType<typeof setInterval>;
 
+  /** ProxyRegistry for outbound HTTP dispatcher routing (P5). */
+  private proxyRegistry?: ProxyRegistry;
+
+  /** Global default proxy name (used when neither server nor group set one). */
+  private defaultProxyName: string | null = null;
+
+  /**
+   * Storage adapter for looking up the per-server `proxyName` field on each
+   * outbound send. Optional — when not set, server-level proxy overrides
+   * collapse to `null` and resolution falls back to group/default.
+   */
+  private storage?: StorageAdapter;
+
   constructor(opts: SessionManagerOptions = {}) {
     const timeoutMs = (opts.idleTimeoutSec ?? 600) * 1000;
     if (timeoutMs > 0) {
@@ -153,6 +172,79 @@ export class SessionManager {
         this.sessions.delete(name);
       }
     }
+  }
+
+  /**
+   * Wire the outbound proxy context. Called once by Gateway.start() after
+   * the ProxyRegistry has loaded. Without this, outbound HTTP fetches use
+   * Node's default (direct) dispatcher.
+   */
+  setProxyContext(
+    registry: ProxyRegistry,
+    defaultProxyName: string | null,
+  ): void {
+    this.proxyRegistry = registry;
+    this.defaultProxyName = defaultProxyName;
+  }
+
+  /**
+   * Attach a storage adapter so HTTP outbound calls can look up the
+   * per-server `proxyName` override. Optional — when omitted, server-level
+   * proxy overrides are ignored.
+   */
+  setStorage(storage: StorageAdapter): void {
+    this.storage = storage;
+  }
+
+  /**
+   * Resolve the proxy dispatcher (if any) to use for an outbound call to
+   * `serverName`. Returns `null` dispatcher when no proxy applies (direct
+   * connect via Node's default fetch).
+   *
+   * Precedence (per resolveProxyName):
+   *   server.proxyName  >  group.proxyName  >  defaultProxyName
+   */
+  private async resolveDispatcher(
+    serverName: string,
+    opts?: { groupProxyName?: string | null },
+  ): Promise<{
+    dispatcher: Dispatcher | null;
+    proxyName: string | null;
+    proxyScheme: string | null;
+  }> {
+    if (!this.proxyRegistry) {
+      return { dispatcher: null, proxyName: null, proxyScheme: null };
+    }
+    let serverProxyName: string | null = null;
+    if (this.storage) {
+      try {
+        const row = await this.storage.servers.findByName(serverName);
+        serverProxyName = row?.proxyName ?? null;
+      } catch {
+        // Storage lookup failures collapse to "no server override" so we
+        // still fall through to group / global defaults.
+        serverProxyName = null;
+      }
+    }
+    const name = resolveProxyName({
+      serverProxyName,
+      groupProxyName: opts?.groupProxyName ?? null,
+      globalDefaultName: this.defaultProxyName,
+    });
+    if (!name) {
+      return { dispatcher: null, proxyName: null, proxyScheme: null };
+    }
+    const dispatcher = this.proxyRegistry.get(name);
+    const url = this.proxyRegistry.getUrl(name);
+    let proxyScheme: string | null = null;
+    if (url) {
+      try {
+        proxyScheme = new URL(url).protocol.replace(":", "");
+      } catch {
+        proxyScheme = null;
+      }
+    }
+    return { dispatcher, proxyName: name, proxyScheme };
   }
 
   /**
@@ -351,12 +443,24 @@ export class SessionManager {
       if (sessionMode !== "stateless" && session.mcpSessionId) {
         headers["Mcp-Session-Id"] = session.mcpSessionId;
       }
-      // Fire and forget — ignore errors
-      fetch(session.config.url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(notification),
-      }).catch(() => {});
+      // Resolve dispatcher asynchronously and fire-and-forget. Errors and
+      // the dispatcher lookup are intentionally swallowed — notifications
+      // must not throw into the caller.
+      void (async () => {
+        try {
+          const proxy = await this.resolveDispatcher(serverName);
+          await fetch(session.config.url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(notification),
+            ...(proxy.dispatcher
+              ? ({ dispatcher: proxy.dispatcher } as Record<string, unknown>)
+              : {}),
+          } as RequestInit);
+        } catch {
+          /* fire-and-forget */
+        }
+      })();
     } else if (session.type === "stdio" && session.process?.stdin) {
       const msg = JSON.stringify(notification) + "\n";
       session.process.stdin.write(msg, () => {});
@@ -366,12 +470,23 @@ export class SessionManager {
   /**
    * Send a JSON-RPC request to an upstream server.
    * Handles transport differences transparently.
+   *
+   * @param opts.timeoutMs        — per-call timeout override (ms)
+   * @param opts.groupProxyName   — group's proxyName (when call arrived via
+   *                                `/mcp/groups/:name`). Server-level proxy
+   *                                still wins per resolveProxyName().
+   *
+   * For backwards compatibility, the 3rd argument may still be a bare
+   * `number` (treated as `timeoutMs`).
    */
   async send(
     serverName: string,
     request: JsonRpcRequest,
-    timeoutMs?: number
+    opts?: number | { timeoutMs?: number; groupProxyName?: string | null },
   ): Promise<JsonRpcResponse> {
+    const normalized: { timeoutMs?: number; groupProxyName?: string | null } =
+      typeof opts === "number" ? { timeoutMs: opts } : (opts ?? {});
+
     // OpenAPI virtual sessions: dispatch via per-tool adapter map.
     if (this.openapiServers.has(serverName)) {
       return this.sendOpenApi(serverName, request);
@@ -384,9 +499,9 @@ export class SessionManager {
 
     let result: JsonRpcResponse;
     if (session.type === "http") {
-      result = await this.sendHttp(serverName, session, request, timeoutMs);
+      result = await this.sendHttp(serverName, session, request, normalized);
     } else {
-      result = await this.sendStdio(serverName, session, request, timeoutMs);
+      result = await this.sendStdio(serverName, session, request, normalized.timeoutMs);
     }
     // Update lastSeen on every successful send so the idle-cleanup loop
     // can determine when a session was last active.
@@ -484,9 +599,9 @@ export class SessionManager {
     serverName: string,
     session: HttpSession,
     request: JsonRpcRequest,
-    timeoutMs?: number
+    opts?: { timeoutMs?: number; groupProxyName?: string | null },
   ): Promise<JsonRpcResponse> {
-    const timeout = timeoutMs ?? session.config.timeout ?? 30000;
+    const timeout = opts?.timeoutMs ?? session.config.timeout ?? 30000;
     const sessionMode = session.config.session_mode ?? "stateful";
 
     return withSpan(
@@ -497,7 +612,7 @@ export class SessionManager {
         "mcp.method": request.method,
         "session.mode": sessionMode,
       },
-      async () => {
+      async (span) => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
 
@@ -525,6 +640,15 @@ export class SessionManager {
         const tp = currentTraceparent();
         if (tp) headers["traceparent"] = tp;
 
+        // Resolve outbound proxy dispatcher (P5).
+        const proxy = await this.resolveDispatcher(serverName, {
+          groupProxyName: opts?.groupProxyName ?? null,
+        });
+        span.setAttribute("proxy.name", proxy.proxyName ?? "direct");
+        if (proxy.proxyScheme) {
+          span.setAttribute("proxy.scheme", proxy.proxyScheme);
+        }
+
         try {
           const fetchStart = Date.now();
           const response = await fetch(session.config.url, {
@@ -532,7 +656,13 @@ export class SessionManager {
             headers,
             body: JSON.stringify(request),
             signal: controller.signal,
-          });
+            ...(proxy.dispatcher
+              ? ({ dispatcher: proxy.dispatcher } as Record<string, unknown>)
+              : {}),
+          } as RequestInit);
+          if (proxy.proxyName) {
+            proxyRequestsTotal.inc({ proxy: proxy.proxyName, result: "success" });
+          }
           upstreamLatency.observe(
             { server: serverName, transport: "streamable-http" },
             (Date.now() - fetchStart) / 1000
@@ -567,6 +697,9 @@ export class SessionManager {
           return (await response.json()) as JsonRpcResponse;
         } catch (err) {
           clearTimeout(timer);
+          if (proxy.proxyName) {
+            proxyRequestsTotal.inc({ proxy: proxy.proxyName, result: "failed" });
+          }
           if (err instanceof Error && err.name === "AbortError") {
             throw new UpstreamTimeoutError(serverName, timeout);
           }

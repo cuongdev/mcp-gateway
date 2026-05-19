@@ -11,6 +11,8 @@ export interface ToolGroup {
   createdAt: number;
   includedServers: string[];
   excludedTools: string[];
+  /** Optional outbound proxy override for this group (P5). */
+  proxyName?: string;
 }
 
 export interface CreateGroupOptions {
@@ -28,6 +30,7 @@ function toGroup(row: GroupRow): ToolGroup {
     createdAt: row.createdAt,
     includedServers: row.includedServers ?? [],
     excludedTools: row.excludedTools ?? [],
+    proxyName: row.proxyName,
   };
 }
 

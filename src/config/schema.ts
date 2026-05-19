@@ -270,6 +270,16 @@ const TracingSchema = z.object({
   samplingRatio: z.number().min(0).max(1).default(0.1),
 }).default({});
 
+// ── Proxy Schema ──────────────────────────────────────
+
+const ProxyConfigSchema = z.object({
+  /**
+   * Name of the proxy used by default when neither the server nor the
+   * group specifies one. `null` means no default proxy (direct connect).
+   */
+  defaultName: z.string().nullable().default(null),
+}).default({});
+
 // ── Tenancy Schema ────────────────────────────────────
 
 const TenancySchema = z.object({
@@ -381,6 +391,8 @@ export const GatewayConfigSchema = z.object({
 
   openapi: OpenApiConfigSchema,
 
+  proxy: ProxyConfigSchema,
+
   tenancy: TenancySchema,
 }).transform((cfg) => {
   if (cfg.auth.requireAuthForApi === undefined) {
@@ -429,4 +441,5 @@ export type ApprovalConfig = z.infer<typeof ApprovalSchema>;
 export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
 export type TracingConfig = z.infer<typeof TracingSchema>;
 export type OpenApiConfig = z.infer<typeof OpenApiConfigSchema>;
+export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
 export type TenancyConfig = z.infer<typeof TenancySchema>;

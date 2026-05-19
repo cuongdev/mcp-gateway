@@ -110,6 +110,13 @@ export const upstreamLatency = new Histogram({
   registers: [metricsRegistry],
 });
 
+export const proxyRequestsTotal = new Counter({
+  name: "mcp_proxy_requests_total",
+  help: "Outbound requests routed through a named proxy",
+  labelNames: ["proxy", "result"] as const,
+  registers: [metricsRegistry],
+});
+
 export const toolCallDuration = new Histogram({
   name: "mcp_tool_call_duration_seconds",
   help: "End-to-end tool call latency (gateway-observed)",

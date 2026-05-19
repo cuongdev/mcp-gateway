@@ -6,6 +6,7 @@
 // final URL before dispatch and enforces a response size cap.
 // ============================================================
 
+import type { Dispatcher } from "undici";
 import { checkUrl } from "./ssrf-guard.js";
 import type { DiscoveredOpenApiTool } from "./operation-to-tool.js";
 import type { OpenApiConfig } from "../../config/schema.js";
@@ -31,6 +32,15 @@ export class OpenApiAdapter implements OpenApiToolRunner {
     private readonly transport: OpenApiTransportConfig,
     private readonly cfg: OpenApiConfig,
     private readonly baseUrlFromSpec: string | null,
+    /**
+     * Optional undici dispatcher to route outbound HTTP through a named
+     * proxy (P5). Set at construction time from the server's `proxyName`.
+     *
+     * Limitation: PATCH'ing the server's `proxyName` later does NOT
+     * refresh this dispatcher — re-register the server (POST /servers)
+     * to pick up a new proxy.
+     */
+    private readonly dispatcher?: Dispatcher,
   ) {}
 
   resolveBaseUrl(): string {
@@ -84,7 +94,14 @@ export class OpenApiAdapter implements OpenApiToolRunner {
       body = JSON.stringify(args.body);
     }
 
-    const res = await fetch(fullUrl, { method: meta.method, headers, body });
+    const res = await fetch(fullUrl, {
+      method: meta.method,
+      headers,
+      body,
+      ...(this.dispatcher
+        ? ({ dispatcher: this.dispatcher } as Record<string, unknown>)
+        : {}),
+    } as RequestInit);
     const ct = res.headers.get("content-type") ?? "";
     const text = await res.text();
     if (text.length > this.cfg.maxResponseBytes) {

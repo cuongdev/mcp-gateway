@@ -160,6 +160,9 @@ export class Gateway {
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
       promptRegistry: this.promptRegistry,
+      // Late-bound: proxyRegistry is initialized in start(), well after
+      // admin routes are mounted in the constructor.
+      proxyRegistry: () => this.proxyRegistry,
     });
     this.app.route(apiPath, adminRoutes);
 
@@ -240,6 +243,12 @@ export class Gateway {
     // Proxy registry — hydrate before admin routes so /api/proxies sees a ready instance.
     this.proxyRegistry = new ProxyRegistry(this.storage);
     await this.proxyRegistry.load();
+    // Wire outbound dispatcher into SessionManager (P5).
+    this.sessionManager.setStorage(this.storage);
+    this.sessionManager.setProxyContext(
+      this.proxyRegistry,
+      this.config.proxy.defaultName ?? null,
+    );
     this.app.route(`${this.config.gateway.apiPath}/proxies`, createProxiesRoutes({
       storage: this.storage,
       proxyRegistry: this.proxyRegistry,

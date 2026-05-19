@@ -179,6 +179,16 @@ async function handleMCPRequest(
 ): Promise<JsonRpcResponse> {
   const { method, params, id } = request;
 
+  // When the call arrives via `/mcp/groups/:name`, propagate the group's
+  // outbound proxy override (P5). Server-level proxyName still wins per
+  // resolveProxyName precedence.
+  const groupProxyName: string | null = groupName
+    ? (groups.get(groupName)?.proxyName ?? null)
+    : null;
+  const sendOpts: { groupProxyName?: string | null } | undefined = groupProxyName
+    ? { groupProxyName }
+    : undefined;
+
   switch (method) {
     // ── Lifecycle ────────────────────────────────────
     case MCP_METHODS.INITIALIZE:
@@ -277,8 +287,12 @@ async function handleMCPRequest(
               "Routing tool call"
             );
 
-            // Forward via session manager
-            const result = await sessionManager.send(resolved.serverName, upstreamRequest);
+            // Forward via session manager (with optional group proxy ctx)
+            const result = await sessionManager.send(
+              resolved.serverName,
+              upstreamRequest,
+              sendOpts,
+            );
             toolCallDuration.observe({ tool: canonicalName, result: "success" }, (Date.now() - toolStart) / 1000);
             return result;
           } catch (err) {
@@ -297,7 +311,7 @@ async function handleMCPRequest(
       if (servers.length === 0) {
         return createSuccessResponse(id, { resources: [] });
       }
-      return sessionManager.send(servers[0], request);
+      return sessionManager.send(servers[0], request, sendOpts);
     }
 
     // ── Prompts ──────────────────────────────────────
@@ -328,7 +342,7 @@ async function handleMCPRequest(
         method: MCP_METHODS.PROMPTS_GET,
         params: { ...(params ?? {}), name: prompt.originalName },
       };
-      return sessionManager.send(prompt.serverName, upstreamRequest);
+      return sessionManager.send(prompt.serverName, upstreamRequest, sendOpts);
     }
 
     default:
