@@ -16,6 +16,7 @@ export const queryKeys = {
   webhooks: ['webhooks'] as const,
   approvals: (status: string = 'pending') => ['approvals', status] as const,
   usage: (params: Record<string, string | number | undefined>) => ['usage', params] as const,
+  audit: (params: Record<string, string | number | undefined>) => ['audit', params] as const,
   rateLimit: ['rate-limit'] as const,
   quota: ['quota'] as const,
   health: ['health'] as const,

@@ -132,3 +132,49 @@ export interface PromptSummary {
   argumentsSchema?: Record<string, unknown>;
   enabled: boolean;
 }
+
+// ── Phase D types ────────────────────────────────────
+
+export interface RateLimitRule {
+  principalType?: 'user' | 'service_account' | 'mcp_client';
+  principalId?: string;
+  tool?: string;
+  limit: string;
+}
+
+export interface RateLimitStatus {
+  enabled: boolean;
+  backend: 'memory' | 'redis';
+  default: string;
+  rules: RateLimitRule[];
+}
+
+export interface QuotaStatus {
+  daily: { used: number; limit?: number };
+  monthly: { used: number; limit?: number };
+}
+
+export interface Approval {
+  id: string;
+  tsRequested: number;
+  tsDecided: number | null;
+  tsExpires: number;
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'executed' | 'failed';
+  principalId: string;
+  tool: string;
+  argsJson: string;
+  argsHash: string;
+  approverId: string | null;
+  decisionReason: string | null;
+  resultJson: string | null;
+}
+
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  secret: string | null;
+  events: string[];
+  enabled: boolean;
+  createdAt: number;
+}
