@@ -9,6 +9,7 @@ export interface GroupRow {
   createdAt: number;
   includedServers?: string[];
   excludedTools?: string[];
+  proxyName?: string;
 }
 
 export interface NewGroup {
@@ -44,7 +45,7 @@ export class GroupRepo {
 
   async findByName(name: string): Promise<GroupRow | null> {
     const r = await this.client.execute({
-      sql: `SELECT name, description, enabled, allowed_roles, created_at
+      sql: `SELECT name, description, enabled, allowed_roles, created_at, proxy_name
             FROM groups WHERE name = ?`,
       args: [name],
     });
@@ -70,6 +71,7 @@ export class GroupRepo {
       createdAt: Number(r.rows[0].created_at),
       includedServers: included.rows.map((s) => s.server_name as string),
       excludedTools: excluded.rows.map((t) => t.canonical_name as string),
+      proxyName: (r.rows[0].proxy_name as string | null) ?? undefined,
     };
   }
 
@@ -115,5 +117,12 @@ export class GroupRepo {
 
   async deleteByName(name: string): Promise<void> {
     await this.client.execute({ sql: 'DELETE FROM groups WHERE name = ?', args: [name] });
+  }
+
+  async setProxyName(name: string, proxyName: string | null): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE groups SET proxy_name = ? WHERE name = ?',
+      args: [proxyName, name],
+    });
   }
 }

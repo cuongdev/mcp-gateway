@@ -11,6 +11,7 @@ export interface ServerRow {
   healthStatus?: 'healthy' | 'unhealthy' | 'unknown';
   healthCheckedAt?: number;
   createdAt: number;
+  proxyName?: string;
 }
 
 export interface UpsertServer {
@@ -48,7 +49,7 @@ export class ServerRepo {
   async findByName(name: string): Promise<ServerRow | null> {
     const r = await this.client.execute({
       sql: `SELECT name, transport_type, transport_config, auto_discover, enabled,
-                   health_status, health_checked_at, created_at
+                   health_status, health_checked_at, created_at, proxy_name
             FROM servers WHERE name = ?`,
       args: [name],
     });
@@ -59,7 +60,7 @@ export class ServerRepo {
   async list(): Promise<ServerRow[]> {
     const r = await this.client.execute(
       `SELECT name, transport_type, transport_config, auto_discover, enabled,
-              health_status, health_checked_at, created_at
+              health_status, health_checked_at, created_at, proxy_name
        FROM servers ORDER BY name`
     );
     return r.rows.map(rowToServer);
@@ -82,6 +83,13 @@ export class ServerRepo {
   async deleteByName(name: string): Promise<void> {
     await this.client.execute({ sql: 'DELETE FROM servers WHERE name = ?', args: [name] });
   }
+
+  async setProxyName(name: string, proxyName: string | null): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE servers SET proxy_name = ? WHERE name = ?',
+      args: [proxyName, name],
+    });
+  }
 }
 
 function rowToServer(r: Record<string, unknown>): ServerRow {
@@ -94,5 +102,6 @@ function rowToServer(r: Record<string, unknown>): ServerRow {
     healthStatus: (r.health_status as ServerRow['healthStatus']) ?? undefined,
     healthCheckedAt: (r.health_checked_at as number | null) ?? undefined,
     createdAt: Number(r.created_at),
+    proxyName: (r.proxy_name as string | null) ?? undefined,
   };
 }
