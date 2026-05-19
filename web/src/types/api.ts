@@ -178,3 +178,47 @@ export interface Webhook {
   enabled: boolean;
   createdAt: number;
 }
+
+// ── Phase E types ────────────────────────────────────
+
+export interface Proxy {
+  id: string;
+  name: string;
+  url: string;
+  description: string | null;
+  enabled: boolean;
+  createdAt: number;
+}
+
+export interface ProxyReference {
+  kind: 'server' | 'group';
+  name: string;
+}
+
+export interface Tenant {
+  id: string;
+  slug: string;
+  displayName: string;
+  plan: string;
+  status: 'active' | 'suspended' | 'pending';
+  createdAt: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface ServerHealth {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  transport: string;
+  lastChecked?: string;
+}
+
+export interface HealthCheckResult {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  version: string;
+  uptime: number;
+  timestamp: string;
+  servers: ServerHealth[];
+}
+
+/** Opaque GatewayConfig for the Settings page — displayed as JSON. */
+export type GatewayConfig = Record<string, unknown>;

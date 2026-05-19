@@ -21,4 +21,6 @@ export const queryKeys = {
   quota: ['quota'] as const,
   health: ['health'] as const,
   systemInfo: ['system', 'info'] as const,
+  metrics: ['metrics'] as const,
+  proxyReferences: (id: string) => ['proxy', id, 'references'] as const,
 };
