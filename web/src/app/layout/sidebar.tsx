@@ -6,9 +6,7 @@ import {
   BarChart3, ScrollText, Activity, HeartPulse,
   Building2, Webhook, Settings, Command as CommandIcon,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
+import { useAuthMe } from '@/lib/use-auth-me';
 import { cn } from '@/lib/utils';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -70,10 +68,7 @@ const groups: Group[] = [
 ];
 
 export function Sidebar({ onOpenCommandPalette }: { onOpenCommandPalette: () => void }) {
-  const { data: me } = useQuery<AuthMe | null>({
-    queryKey: queryKeys.authMe,
-    queryFn: () => api<AuthMe>('/auth/me', { silent401: true }).catch(() => null),
-  });
+  const { data: me } = useAuthMe();
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">

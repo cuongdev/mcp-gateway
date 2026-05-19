@@ -1,17 +1,6 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
-import type { AuthMe } from '@/types/api';
-
-async function fetchMe(): Promise<AuthMe | null> {
-  try {
-    return await api<AuthMe>('/auth/me', { silent401: true });
-  } catch {
-    return null;
-  }
-}
+import { useAuthMe } from '@/lib/use-auth-me';
 
 export function AuthGate() {
   const navigate = useNavigate();
@@ -23,11 +12,7 @@ export function AuthGate() {
     return () => window.removeEventListener('mcp:unauth', handler);
   }, [navigate, loc]);
 
-  const { data, isLoading } = useQuery({
-    queryKey: queryKeys.authMe,
-    queryFn: fetchMe,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isLoading } = useAuthMe();
 
   if (isLoading) {
     return (

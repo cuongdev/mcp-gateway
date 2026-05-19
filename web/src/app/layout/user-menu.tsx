@@ -1,21 +1,17 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User as UserIcon, Key } from 'lucide-react';
 import { api } from '@/lib/api';
-import { queryKeys } from '@/lib/query-keys';
+import { useAuthMe } from '@/lib/use-auth-me';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { AuthMe } from '@/types/api';
 
 export function UserMenu() {
-  const { data: me } = useQuery<AuthMe | null>({
-    queryKey: queryKeys.authMe,
-    queryFn: () => api<AuthMe>('/auth/me', { silent401: true }).catch(() => null),
-  });
+  const { data: me } = useAuthMe();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
