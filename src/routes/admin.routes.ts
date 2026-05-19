@@ -337,14 +337,20 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     return c.json({ ok: true });
   });
 
-  /** Enable or disable a server */
+  /** Enable or disable a server, or attach/detach an outbound proxy by name */
   app.patch("/servers/:name", async (c) => {
     const name = c.req.param("name");
     const existing = await storage.servers.findByName(name);
     if (!existing) return c.json({ error: { code: "not_found" } }, 404);
-    const body = z.object({ enabled: z.boolean().optional() }).parse(await c.req.json());
+    const body = z.object({
+      enabled: z.boolean().optional(),
+      proxyName: z.string().nullable().optional(),
+    }).parse(await c.req.json());
     if (body.enabled !== undefined) {
       await storage.servers.setEnabled(name, body.enabled);
+    }
+    if (body.proxyName !== undefined) {
+      await storage.servers.setProxyName(name, body.proxyName);
     }
     return c.json({ ok: true });
   });
@@ -507,6 +513,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       allowedRoles?: string[];
       description?: string;
       enabled?: boolean;
+      proxyName?: string | null;
     };
 
     if (body.tools !== undefined) {
@@ -517,6 +524,9 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     }
     if (body.excludedTools !== undefined) {
       await storage.groups.setExcludedTools(name, body.excludedTools);
+    }
+    if (body.proxyName !== undefined) {
+      await storage.groups.setProxyName(name, body.proxyName);
     }
 
     await toolGroups.load();

@@ -52,6 +52,8 @@ import { WebhookDispatcher } from "./notify/webhook.dispatcher.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 import { createTenantsRoutes } from "./routes/admin/tenants.routes.js";
+import { createProxiesRoutes } from "./routes/admin/proxies.routes.js";
+import { ProxyRegistry } from "./proxy/registry.js";
 import { bootstrapFromConfig } from "./storage/bootstrap.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -79,6 +81,7 @@ export class Gateway {
   private approvalService?: ApprovalService;
   private approvalSweepInterval?: ReturnType<typeof setInterval>;
   private webhookDispatcher?: WebhookDispatcher;
+  private proxyRegistry?: ProxyRegistry;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -233,6 +236,15 @@ export class Gateway {
       await this.toolRegistry.load();
       await this.toolGroups.load();
     }
+
+    // Proxy registry — hydrate before admin routes so /api/proxies sees a ready instance.
+    this.proxyRegistry = new ProxyRegistry(this.storage);
+    await this.proxyRegistry.load();
+    this.app.route(`${this.config.gateway.apiPath}/proxies`, createProxiesRoutes({
+      storage: this.storage,
+      proxyRegistry: this.proxyRegistry,
+    }));
+    log.info({ path: `${this.config.gateway.apiPath}/proxies` }, "Registered: Proxy admin routes");
 
     // System tenant admin routes — available regardless of tenancy.enabled.
     this.app.route(`${this.config.gateway.apiPath}/system/tenants`, createTenantsRoutes({ storage: this.storage }));
@@ -403,6 +415,10 @@ export class Gateway {
 
     if (this.toolCache?.shutdown) {
       await this.toolCache.shutdown();
+    }
+
+    if (this.proxyRegistry) {
+      await this.proxyRegistry.shutdown();
     }
 
     log.info("Gateway shut down complete");
