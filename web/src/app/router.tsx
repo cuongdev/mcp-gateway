@@ -17,6 +17,9 @@ import { PoliciesPage } from '@/features/policies/page';
 import { UsersPage } from '@/features/users/page';
 import { UserNewSheet } from '@/features/users/new-sheet';
 import { UserDetailSheet } from '@/features/users/detail-sheet';
+import { McpClientsPage } from '@/features/mcp-clients/page';
+import { McpClientNewSheet } from '@/features/mcp-clients/new-sheet';
+import { McpClientDetailSheet } from '@/features/mcp-clients/detail-sheet';
 
 export function App() {
   return (
@@ -47,7 +50,10 @@ export function App() {
                 <Route path="new" element={<UserNewSheet />} />
                 <Route path=":id" element={<UserDetailSheet />} />
               </Route>
-              <Route path="/mcp-clients/*" element={<ComingSoon phase="C" title="MCP Clients" />} />
+              <Route path="/mcp-clients" element={<McpClientsPage />}>
+                <Route path="new" element={<McpClientNewSheet />} />
+                <Route path=":id" element={<McpClientDetailSheet />} />
+              </Route>
               <Route path="/my-tokens" element={<ComingSoon phase="C" title="My Tokens" />} />
               <Route path="/oidc" element={<ComingSoon phase="C" title="OIDC Providers" />} />
               <Route path="/policies" element={<PoliciesPage />} />
