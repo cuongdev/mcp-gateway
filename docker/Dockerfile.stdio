@@ -18,6 +18,15 @@ COPY config ./config
 COPY bin ./bin
 COPY docs ./docs
 
+# Build the dashboard bundle (the tsx runtime can't compile it itself).
+# Place it under dist/dashboard/ so Gateway.setupDashboard() picks it up
+# via its `<__dirname>/../dist/dashboard` fallback path.
+COPY web ./web
+RUN cd web && npm ci && npm run build \
+ && mkdir -p /app/dist/dashboard \
+ && cp -r web/dist/. /app/dist/dashboard/ \
+ && rm -rf web/node_modules
+
 RUN npm install -g tsx
 RUN chmod +x bin/mcp-gateway
 

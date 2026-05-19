@@ -5,6 +5,8 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY web/ ./web/
+RUN cd web && npm ci
 RUN npm run build
 
 FROM node:20-alpine AS runner
