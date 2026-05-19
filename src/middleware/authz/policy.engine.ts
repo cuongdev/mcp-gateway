@@ -469,6 +469,27 @@ export async function addRoleForUser(
 }
 
 /**
+ * Admin API: List all role bindings (Casbin g-rules) as
+ * { user, role } pairs.
+ */
+export async function listRoleBindings(): Promise<{ user: string; role: string }[]> {
+  if (!enforcer) throw new Error("Enforcer not initialized");
+  const grouping = await enforcer.getGroupingPolicy();
+  return grouping
+    .filter((row) => row.length >= 2)
+    .map((row) => ({ user: row[0]!, role: row[1]! }));
+}
+
+/**
+ * Admin API: Remove a role binding (Casbin g-rule).
+ */
+export async function removeRoleForUser(user: string, role: string): Promise<boolean> {
+  if (!enforcer) throw new Error("Enforcer not initialized");
+  decisionCache.clear();
+  return enforcer.deleteRoleForUser(user, role);
+}
+
+/**
  * Admin API: List all policies.
  */
 export async function listPolicies(): Promise<string[][]> {

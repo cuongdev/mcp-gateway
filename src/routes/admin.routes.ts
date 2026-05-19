@@ -50,6 +50,8 @@ import {
   addPolicy,
   removePolicy,
   addRoleForUser,
+  listRoleBindings,
+  removeRoleForUser,
 } from "../middleware/authz/policy.engine.js";
 import { logger } from "../utils/logger.js";
 import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
@@ -644,10 +646,25 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     }
   });
 
+  app.get("/roles", async (c) => {
+    try {
+      const bindings = await listRoleBindings();
+      return c.json({ bindings });
+    } catch {
+      return c.json({ error: "Failed to list role bindings" }, 500);
+    }
+  });
+
   app.post("/roles", async (c) => {
     const { user, role } = await c.req.json();
     const added = await addRoleForUser(user, role);
     return c.json({ added });
+  });
+
+  app.delete("/roles", async (c) => {
+    const { user, role } = await c.req.json();
+    const removed = await removeRoleForUser(user, role);
+    return c.json({ removed });
   });
 
   // ═══════════════════════════════════════════════════════
