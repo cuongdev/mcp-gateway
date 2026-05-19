@@ -66,7 +66,9 @@ export class PolicyEngine {
   async load(): Promise<void> {
     const rules = await this.opts.storage.policies.list();
     const csv = policiesToCsv(rules);
-    const adapter = new StringAdapter(csv);
+    // StringAdapter requires a non-empty string; use a comment line when
+    // there are no policy rules (e.g. fresh / development database).
+    const adapter = new StringAdapter(csv || "# no rules");
     this.enforcer = await newEnforcer(this.opts.modelFile, adapter);
     decisionCache.clear();
     log.info(

@@ -11,7 +11,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:web": "cd web && npm run dev",
-    "build": "tsc && npm run build:web",
+    "build": "tsc && npm run build:assets && npm run build:web",
+    "build:assets": "cp src/storage/migrations/*.sql dist/storage/migrations/",
     "build:web": "cd web && npm run build && rm -rf ../dist/dashboard && mkdir -p ../dist/dashboard && cp -r dist/. ../dist/dashboard/",
     "start": "node dist/index.js",
     "test": "vitest run",
