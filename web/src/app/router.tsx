@@ -37,6 +37,7 @@ const PromptsPage = lazy(() => import('@/features/prompts/page').then((m) => ({ 
 const OidcProvidersPage = lazy(() => import('@/features/oidc/page').then((m) => ({ default: m.OidcProvidersPage })));
 const RateLimitPage = lazy(() => import('@/features/rate-limit/page').then((m) => ({ default: m.RateLimitPage })));
 const QuotaPage = lazy(() => import('@/features/quota/page').then((m) => ({ default: m.QuotaPage })));
+const CachePage = lazy(() => import('@/features/cache/page').then((m) => ({ default: m.CachePage })));
 
 function RouteSuspenseFallback() {
   return (
@@ -88,7 +89,7 @@ export function App() {
                 {/* RELIABILITY */}
                 <Route path="/rate-limit" element={<RateLimitPage />} />
                 <Route path="/quota" element={<QuotaPage />} />
-                <Route path="/cache" element={<ComingSoon phase="D" title="Cache" />} />
+                <Route path="/cache" element={<CachePage />} />
                 <Route path="/approvals" element={<ComingSoon phase="D" title="Approvals" />} />
                 {/* OBSERVABILITY */}
                 <Route path="/usage" element={<ComingSoon phase="D" title="Usage" />} />
