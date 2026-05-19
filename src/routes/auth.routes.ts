@@ -338,16 +338,31 @@ export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
   // Returns the principal resolved by sessionCookieMiddleware (or
   // bearerTokenMiddleware). Reads `c.var.principal` directly — no
   // re-verification of cookies/tokens happens here.
-  app.get("/me", (c) => {
+  app.get("/me", async (c) => {
     const principal = c.get("principal");
     if (!principal) {
       return c.json({ error: { code: "unauthenticated" } }, 401);
+    }
+    // Look up the principal's Casbin role bindings.
+    // Subject is the email (preferred) or principalId — matches what
+    // `POST /api/roles` accepts as `user`.
+    const subject = principal.email ?? principal.id;
+    let roles: string[] = [];
+    try {
+      const { listRoleBindings } = await import("../middleware/authz/policy.engine.js");
+      const bindings = await listRoleBindings();
+      roles = bindings.filter((b) => b.user === subject).map((b) => b.role);
+    } catch {
+      // Enforcer not initialized (authorization disabled or boot order edge):
+      // surface empty roles rather than crashing /auth/me.
+      roles = [];
     }
     return c.json({
       principalId: principal.id,
       type: principal.type,
       email: principal.email ?? null,
       displayName: principal.displayName,
+      roles,
     });
   });
 
