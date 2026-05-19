@@ -32,11 +32,11 @@ const groups: Group[] = [
   {
     id: 'identity', label: 'Identity', defaultOpen: true,
     items: [
-      { to: '/users', label: 'Users', icon: Users },
-      { to: '/mcp-clients', label: 'MCP Clients', icon: Bot },
+      { to: '/users', label: 'Users', icon: Users, gated: (me) => me?.roles.includes('admin') ?? false },
+      { to: '/mcp-clients', label: 'MCP Clients', icon: Bot, gated: (me) => me?.roles.includes('admin') ?? false },
       { to: '/my-tokens', label: 'My Tokens', icon: Key, gated: (me) => me?.type === 'user' },
-      { to: '/oidc', label: 'OIDC Providers', icon: ShieldCheck },
-      { to: '/policies', label: 'Policies', icon: Lock },
+      { to: '/oidc', label: 'OIDC Providers', icon: ShieldCheck, gated: (me) => me?.roles.includes('admin') ?? false },
+      { to: '/policies', label: 'Policies', icon: Lock, gated: (me) => me?.roles.includes('admin') ?? false },
     ],
   },
   {
