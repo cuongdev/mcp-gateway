@@ -26,7 +26,7 @@ const groups: Group[] = [
       { to: '/tools', label: 'Tools', icon: Wrench },
       { to: '/groups', label: 'Tool Groups', icon: LayoutGrid },
       { to: '/prompts', label: 'Prompts', icon: MessageSquare },
-      { to: '/proxies', label: 'Proxies', icon: Network },
+      { to: '/proxies', label: 'Proxies', icon: Network, gated: (me) => me?.roles.includes('admin') ?? false },
     ],
   },
   {
@@ -60,9 +60,9 @@ const groups: Group[] = [
   {
     id: 'system', label: 'System',
     items: [
-      { to: '/tenants', label: 'Tenants', icon: Building2 },
-      { to: '/webhooks', label: 'Webhooks', icon: Webhook },
-      { to: '/settings', label: 'Settings', icon: Settings },
+      { to: '/tenants', label: 'Tenants', icon: Building2, gated: (me) => me?.roles.includes('admin') ?? false },
+      { to: '/webhooks', label: 'Webhooks', icon: Webhook, gated: (me) => me?.roles.includes('admin') ?? false },
+      { to: '/settings', label: 'Settings', icon: Settings, gated: (me) => me?.roles.includes('admin') ?? false },
     ],
   },
 ];
