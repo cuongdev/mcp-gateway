@@ -88,6 +88,10 @@ export const ToolGroupSchema = z.object({
   tools: z.array(z.string()),
   /** Restrict to specific roles (empty = all) */
   allowedRoles: z.array(z.string()).optional(),
+  /** Servers to include (auto-expanded to their tools at MCP serve time) */
+  includedServers: z.array(z.string()).optional(),
+  /** Canonical tool names to exclude after server expansion */
+  excludedTools: z.array(z.string()).optional(),
 });
 
 // ── OIDC Provider Schema ─────────────────────────────

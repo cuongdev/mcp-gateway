@@ -52,6 +52,7 @@ import { WebhookDispatcher } from "./notify/webhook.dispatcher.js";
 import type { ToolCache } from "./cache/interface.js";
 import { logger } from "./utils/logger.js";
 import { createTenantsRoutes } from "./routes/admin/tenants.routes.js";
+import { bootstrapFromConfig } from "./storage/bootstrap.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -217,6 +218,21 @@ export class Gateway {
     await this.promptRegistry.load();
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
+
+    // Bootstrap config-declared servers + groups into storage
+    // (idempotent, additive). Runtime-registered entries absent from
+    // config are preserved. OpenAPI transports are skipped — register
+    // them at runtime via the admin API/CLI.
+    const bootstrapLog = {
+      info: (msg: string, extra?: Record<string, unknown>) => log.info(extra ?? {}, msg),
+      warn: (msg: string, extra?: Record<string, unknown>) => log.warn(extra ?? {}, msg),
+    };
+    const bootstrap = await bootstrapFromConfig(this.storage, this.config, bootstrapLog);
+    if (bootstrap.serversApplied > 0 || bootstrap.groupsApplied > 0) {
+      // Re-hydrate registries so they see the freshly-upserted rows.
+      await this.toolRegistry.load();
+      await this.toolGroups.load();
+    }
 
     // System tenant admin routes — available regardless of tenancy.enabled.
     this.app.route(`${this.config.gateway.apiPath}/system/tenants`, createTenantsRoutes({ storage: this.storage }));
