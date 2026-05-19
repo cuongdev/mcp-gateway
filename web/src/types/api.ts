@@ -26,6 +26,10 @@ export interface ToolSummary {
   originalName: string;
   description?: string;
   enabled: boolean;
+  cacheable: boolean;
+  cacheTtlSec: number | null;
+  cachePerPrincipal: boolean;
+  sensitive: boolean;
 }
 
 export interface GroupSummary {
@@ -35,6 +39,46 @@ export interface GroupSummary {
   allowedRoles?: string[];
   includedServers?: string[];
   excludedTools?: string[];
+}
+
+// ── Phase B types ────────────────────────────────────
+
+export type ServerTransport =
+  | { type: 'streamable-http' | 'sse'; url: string; bearerToken?: string; timeout?: number; session_mode?: 'stateful' | 'stateless'; headers?: Record<string, string> }
+  | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string>; stateful?: boolean; idleTimeoutMs?: number }
+  | {
+      type: 'openapi';
+      specUrl?: string;
+      specPath?: string;
+      baseUrl?: string;
+      auth?: { type?: 'bearer' | 'apiKey'; token?: string; headerName?: string };
+      filter?: { tags?: string[]; operationIds?: string[]; exclude?: string[] };
+    };
+
+export interface RegisterServerBody {
+  name: string;
+  transport: ServerTransport;
+  proxyName?: string | null;
+}
+
+export interface GroupDetail {
+  name: string;
+  description: string;
+  tools: string[];
+  enabled: boolean;
+  allowedRoles: string[];
+  createdAt: number;
+  includedServers: string[];
+  excludedTools: string[];
+  proxyName?: string;
+}
+
+/** Casbin p-rule as tuple `[subject, object, action]`. */
+export type Policy = [string, string, string];
+
+export interface RoleBinding {
+  user: string;
+  role: string;
 }
 
 export interface UsageBucket {
