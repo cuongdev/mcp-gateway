@@ -173,37 +173,72 @@ export class Gateway {
   }
 
   /**
-   * Serve the admin dashboard SPA.
-   * GET /dashboard  → serves index.html
-   * GET /           → redirects to /dashboard
+   * Serve the admin dashboard SPA bundle.
+   *
+   *   GET /dashboard           → static index.html
+   *   GET /dashboard/assets/*  → static asset
+   *   GET /dashboard/<route>   → falls back to index.html so React Router
+   *                              handles client-side routing
+   *   GET /                    → redirects to /dashboard
+   *
+   * Resolves the bundle directory by trying known locations in order:
+   *   1. <__dirname>/dashboard            — tsc build (__dirname = dist/)
+   *   2. <__dirname>/../dist/dashboard    — tsx run (__dirname = src/)
+   *   3. <__dirname>/../../web/dist       — local dev convenience
+   * The first directory containing `index.html` wins.
    */
   private setupDashboard() {
-    // Read dashboard HTML at startup (single file SPA)
-    let dashboardHtml: string;
-    try {
-      const dashboardPath = resolve(__dirname, "dashboard", "index.html");
-      dashboardHtml = readFileSync(dashboardPath, "utf-8");
-      log.info("Dashboard loaded from src/dashboard/index.html");
-    } catch {
-      log.warn("Dashboard HTML not found — /dashboard will return 404");
+    const candidates = [
+      resolve(__dirname, "dashboard"),
+      resolve(__dirname, "..", "dist", "dashboard"),
+      resolve(__dirname, "..", "..", "web", "dist"),
+    ];
+    let dashboardDir: string | null = null;
+    let indexHtml: string | null = null;
+    for (const dir of candidates) {
+      try {
+        indexHtml = readFileSync(resolve(dir, "index.html"), "utf-8");
+        dashboardDir = dir;
+        break;
+      } catch { /* try next */ }
+    }
+    if (!dashboardDir || !indexHtml) {
+      log.warn({ tried: candidates }, "Dashboard bundle not found — run `npm run build:web`");
       return;
     }
 
-    this.app.get("/dashboard", (c) => {
-      return c.html(dashboardHtml);
+    // Serve static assets (JS, CSS, images, etc) from /dashboard/<path>.
+    // Hono doesn't ship a node-fs static helper out of the box on
+    // @hono/node-server, so we do it manually for the assets/* tree which
+    // is the only thing Vite emits.
+    this.app.get("/dashboard/assets/*", async (c) => {
+      const rel = c.req.path.replace(/^\/dashboard\//, "");
+      const filePath = resolve(dashboardDir, rel);
+      try {
+        const data = readFileSync(filePath);
+        const ext = filePath.split('.').pop() ?? '';
+        const mime: Record<string, string> = {
+          js: 'application/javascript', css: 'text/css',
+          map: 'application/json', svg: 'image/svg+xml',
+          png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+          ico: 'image/x-icon', woff2: 'font/woff2',
+        };
+        c.header('Content-Type', mime[ext] ?? 'application/octet-stream');
+        c.header('Cache-Control', 'public, max-age=31536000, immutable');
+        return c.body(data as unknown as ArrayBuffer);
+      } catch {
+        return c.notFound();
+      }
     });
 
-    // Also serve at /dashboard/* for SPA client-side routing
-    this.app.get("/dashboard/*", (c) => {
-      return c.html(dashboardHtml);
-    });
+    // SPA fallback: any other /dashboard or /dashboard/* path returns index.html.
+    this.app.get("/dashboard", (c) => c.html(indexHtml!));
+    this.app.get("/dashboard/*", (c) => c.html(indexHtml!));
 
-    // Redirect root to dashboard
-    this.app.get("/", (c) => {
-      return c.redirect("/dashboard");
-    });
+    // Redirect root to dashboard.
+    this.app.get("/", (c) => c.redirect("/dashboard"));
 
-    log.info({ path: "/dashboard" }, "Admin Dashboard mounted");
+    log.info({ path: "/dashboard", bundleDir: dashboardDir }, "Admin Dashboard mounted");
   }
 
   // ── Lifecycle ──────────────────────────────────────
