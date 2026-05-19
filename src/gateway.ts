@@ -128,7 +128,10 @@ export class Gateway {
   }
 
   private setupMiddleware() {
-    buildMiddlewarePipeline(this.app, this.config, { storage: this.storage });
+    buildMiddlewarePipeline(this.app, this.config, {
+      storage: this.storage,
+      policyEngine: this.policyEngine,
+    });
   }
 
   private setupRoutes() {
@@ -147,7 +150,10 @@ export class Gateway {
     log.info({ path: `${mcpPath}/groups/:name` }, "MCP Group endpoints mounted");
 
     // ── Auth Routes (OIDC login/callback/logout) ─────
-    const authRoutes = createAuthRoutes(this.config, { storage: this.storage });
+    const authRoutes = createAuthRoutes(this.config, {
+      storage: this.storage,
+      policyEngine: this.policyEngine,
+    });
     this.app.route("/auth", authRoutes);
     log.info({ providers: this.config.oidcProviders.map((p) => p.id) }, "Auth routes mounted at /auth");
 
@@ -160,6 +166,7 @@ export class Gateway {
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
       promptRegistry: this.promptRegistry,
+      policyEngine: this.policyEngine,
       // Late-bound: proxyRegistry is initialized in start(), well after
       // admin routes are mounted in the constructor.
       proxyRegistry: () => this.proxyRegistry,
@@ -259,14 +266,6 @@ export class Gateway {
     await this.promptRegistry.load();
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
-
-    // Wire the module-level Casbin singleton too — admin route handlers
-    // (`listPolicies`, `addRoleForUser`, `listRoleBindings`, etc.) read
-    // from it directly. Without this, `/api/policies` and `/api/roles`
-    // return 500 on a freshly-booted gateway. See FLAG at
-    // src/middleware/authz/policy.engine.ts:173-176.
-    const { initializeEnforcer } = await import("./middleware/authz/policy.engine.js");
-    await initializeEnforcer(this.config.authorization);
 
     // Bootstrap config-declared servers + groups into storage
     // (idempotent, additive). Runtime-registered entries absent from

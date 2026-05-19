@@ -7,7 +7,7 @@
 import type { UserContext } from "../../types/gateway.js";
 import type { JsonRpcResponse } from "../../types/mcp.js";
 import { MCP_METHODS } from "../../types/mcp.js";
-import { getEnforcer } from "./policy.engine.js";
+import type { PolicyEngine } from "./policy.engine.js";
 import { logger } from "../../utils/logger.js";
 
 const log = logger.child({ component: "response-filter" });
@@ -17,6 +17,7 @@ const log = logger.child({ component: "response-filter" });
  * This ensures users only see tools/resources they're authorized to use.
  */
 export async function filterResponse(
+  engine: PolicyEngine,
   user: UserContext,
   method: string,
   response: JsonRpcResponse
@@ -27,11 +28,11 @@ export async function filterResponse(
 
   switch (method) {
     case MCP_METHODS.TOOLS_LIST:
-      return filterToolsList(user, response);
+      return filterToolsList(engine, user, response);
     case MCP_METHODS.RESOURCES_LIST:
-      return filterResourcesList(user, response);
+      return filterResourcesList(engine, user, response);
     case MCP_METHODS.PROMPTS_LIST:
-      return filterPromptsList(user, response);
+      return filterPromptsList(engine, user, response);
     default:
       return response;
   }
@@ -41,11 +42,11 @@ export async function filterResponse(
  * Filter tools/list response — remove tools the user cannot execute.
  */
 async function filterToolsList(
+  engine: PolicyEngine,
   user: UserContext,
   response: JsonRpcResponse
 ): Promise<JsonRpcResponse> {
-  const enforcer = getEnforcer();
-  if (!enforcer) return response;
+  const enforcer = engine.getEnforcer();
 
   const result = response.result as { tools?: Array<{ name: string; [k: string]: unknown }> };
   if (!result?.tools) return response;
@@ -102,11 +103,11 @@ async function filterToolsList(
  * Filter resources/list response.
  */
 async function filterResourcesList(
+  engine: PolicyEngine,
   user: UserContext,
   response: JsonRpcResponse
 ): Promise<JsonRpcResponse> {
-  const enforcer = getEnforcer();
-  if (!enforcer) return response;
+  const enforcer = engine.getEnforcer();
 
   const result = response.result as {
     resources?: Array<{ uri: string; [k: string]: unknown }>;
@@ -142,11 +143,11 @@ async function filterResourcesList(
  * Filter prompts/list response.
  */
 async function filterPromptsList(
+  engine: PolicyEngine,
   user: UserContext,
   response: JsonRpcResponse
 ): Promise<JsonRpcResponse> {
-  const enforcer = getEnforcer();
-  if (!enforcer) return response;
+  const enforcer = engine.getEnforcer();
 
   const result = response.result as {
     prompts?: Array<{ name: string; [k: string]: unknown }>;

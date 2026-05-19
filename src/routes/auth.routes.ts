@@ -36,6 +36,7 @@ import {
 import type { GatewayConfig, OIDCProvider } from "../config/schema.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { GatewayVariables } from "../middleware/types.js";
+import type { PolicyEngine } from "../middleware/authz/policy.engine.js";
 import { signSessionCookie } from "../middleware/auth/session-cookie.middleware.js";
 import { logger } from "../utils/logger.js";
 
@@ -116,6 +117,7 @@ function generateCodeChallenge(verifier: string): string {
 
 export interface AuthRoutesDeps {
   storage: StorageAdapter;
+  policyEngine: PolicyEngine;
 }
 
 export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
@@ -391,8 +393,7 @@ export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
     const subject = principal.email ?? principal.id;
     let roles: string[] = [];
     try {
-      const { listRoleBindings } = await import("../middleware/authz/policy.engine.js");
-      const bindings = await listRoleBindings();
+      const bindings = await deps.policyEngine.listRoleBindings();
       roles = bindings.filter((b) => b.user === subject).map((b) => b.role);
     } catch {
       // Enforcer not initialized (authorization disabled or boot order edge):

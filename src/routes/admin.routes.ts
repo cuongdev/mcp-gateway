@@ -48,15 +48,7 @@ import type { StorageAdapter } from "../storage/adapter.js";
 import type { ServerTransportType } from "../storage/repositories/server.repo.js";
 import { performHealthCheck } from "../middleware/monitoring/health.js";
 import { getMetrics } from "../middleware/monitoring/metrics.middleware.js";
-import {
-  listPolicies,
-  reloadPolicies,
-  addPolicy,
-  removePolicy,
-  addRoleForUser,
-  listRoleBindings,
-  removeRoleForUser,
-} from "../middleware/authz/policy.engine.js";
+import type { PolicyEngine } from "../middleware/authz/policy.engine.js";
 import { logger } from "../utils/logger.js";
 import { createMcpClientsRoutes } from "./admin/mcp-clients.routes.js";
 import { createUsersRoutes } from "./admin/users.routes.js";
@@ -77,6 +69,7 @@ interface AdminRouteDeps {
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
   promptRegistry: PromptRegistry;
+  policyEngine: PolicyEngine;
   /** Optional — only present when cache.enabled */
   cache?: ToolCache;
   /**
@@ -95,7 +88,7 @@ interface AdminRouteDeps {
  */
 export function createAdminRoutes(deps: AdminRouteDeps) {
   const app = new Hono<{ Variables: GatewayVariables }>();
-  const { config, storage, toolRegistry, toolGroups, sessionManager } = deps;
+  const { config, storage, toolRegistry, toolGroups, sessionManager, policyEngine } = deps;
 
   // ═══════════════════════════════════════════════════════
   // Health & Monitoring
@@ -628,7 +621,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   app.get("/policies", async (c) => {
     try {
-      const policies = await listPolicies();
+      const policies = await policyEngine.listPolicies();
       return c.json({ policies });
     } catch {
       return c.json({ error: "Failed to list policies" }, 500);
@@ -638,7 +631,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.post("/policies", async (c) => {
     try {
       const { sub, obj, act } = await c.req.json();
-      const added = await addPolicy(sub, obj, act);
+      const added = await policyEngine.addPolicy(sub, obj, act);
       return c.json({ added });
     } catch (err) {
       log.warn({ err }, "addPolicy failed");
@@ -649,7 +642,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.delete("/policies", async (c) => {
     try {
       const { sub, obj, act } = await c.req.json();
-      const removed = await removePolicy(sub, obj, act);
+      const removed = await policyEngine.removePolicy(sub, obj, act);
       return c.json({ removed });
     } catch (err) {
       log.warn({ err }, "removePolicy failed");
@@ -659,7 +652,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   app.post("/policies/reload", async (c) => {
     try {
-      await reloadPolicies();
+      await policyEngine.reload();
       return c.json({ message: "Policies reloaded" });
     } catch {
       return c.json({ error: "Failed to reload policies" }, 500);
@@ -668,7 +661,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   app.get("/roles", async (c) => {
     try {
-      const bindings = await listRoleBindings();
+      const bindings = await policyEngine.listRoleBindings();
       return c.json({ bindings });
     } catch {
       return c.json({ error: "Failed to list role bindings" }, 500);
@@ -678,7 +671,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.post("/roles", async (c) => {
     try {
       const { user, role } = await c.req.json();
-      const added = await addRoleForUser(user, role);
+      const added = await policyEngine.addRoleForUser(user, role);
       return c.json({ added });
     } catch (err) {
       log.warn({ err }, "addRoleForUser failed");
@@ -689,7 +682,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.delete("/roles", async (c) => {
     try {
       const { user, role } = await c.req.json();
-      const removed = await removeRoleForUser(user, role);
+      const removed = await policyEngine.removeRoleForUser(user, role);
       return c.json({ removed });
     } catch (err) {
       log.warn({ err }, "removeRoleForUser failed");
@@ -706,7 +699,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.route("/users", createUsersRoutes({ storage }));
   app.route("/prompts", createPromptsRoutes({ promptRegistry: deps.promptRegistry }));
   app.route("/usage", createUsageRoutes({ storage }));
-  app.route("/system/info", createSystemInfoRoutes({ config }));
+  app.route("/system/info", createSystemInfoRoutes({ config, policyEngine }));
 
   if (deps.cache) {
     app.route("/cache", createCacheRoutes({ cache: deps.cache }));

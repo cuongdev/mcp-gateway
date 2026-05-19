@@ -20,13 +20,14 @@ import { bearerTokenMiddleware } from "./auth/bearer-token.middleware.js";
 import { sessionCookieMiddleware } from "./auth/session-cookie.middleware.js";
 
 // Middleware factories
-import { createAuthzMiddleware } from "./authz/policy.engine.js";
+import { createAuthzMiddleware, type PolicyEngine } from "./authz/policy.engine.js";
 import { createAuditMiddleware } from "./audit/audit.middleware.js";
 import { createMetricsMiddleware } from "./monitoring/metrics.middleware.js";
 import { tenantMiddleware } from "./tenant/tenant.middleware.js";
 
 export interface PipelineDeps {
   storage: StorageAdapter;
+  policyEngine: PolicyEngine;
 }
 
 /**
@@ -178,7 +179,7 @@ export function buildMiddlewarePipeline(
 
   // ── 6. Authorization — MCP routes ──────────────────
   if (config.authorization?.enabled) {
-    const authzMiddleware = createAuthzMiddleware(config.authorization);
+    const authzMiddleware = createAuthzMiddleware(deps.policyEngine, config.authorization);
 
     app.use(`${mcpPath}/*`, authzMiddleware);
     app.use(`${mcpPath}`, authzMiddleware);

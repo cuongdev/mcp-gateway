@@ -6,7 +6,7 @@ import { ToolGroupManager } from '../../src/registry/tool.groups.js';
 import { PromptRegistry } from '../../src/registry/prompt.registry.js';
 import { SessionManager } from '../../src/session/session.manager.js';
 import { createAdminRoutes } from '../../src/routes/admin.routes.js';
-import { initializeEnforcer, addRoleForUser } from '../../src/middleware/authz/policy.engine.js';
+import { PolicyEngine } from '../../src/middleware/authz/policy.engine.js';
 import { GatewayConfigSchema, type GatewayConfig } from '../../src/config/schema.js';
 import { newId } from '../../src/utils/uuid.js';
 import { hashSecret } from '../../src/utils/crypto.js';
@@ -28,10 +28,14 @@ async function setup(opts: { isAdmin: boolean }) {
     gateway: { port: 3001, host: '127.0.0.1' },
     authorization: { enabled: true, modelFile: './config/policy.model.conf', policyFile: './config/policy.csv' },
   });
-  await initializeEnforcer(config.authorization);
+  const policyEngine = new PolicyEngine({
+    storage,
+    modelFile: config.authorization.modelFile,
+  });
+  await policyEngine.load();
 
   if (opts.isAdmin) {
-    await addRoleForUser(email, 'admin');
+    await policyEngine.addRoleForUser(email, 'admin');
   }
 
   const registry = new ToolRegistry(storage);
@@ -42,6 +46,7 @@ async function setup(opts: { isAdmin: boolean }) {
     toolGroups: new ToolGroupManager(storage, registry),
     sessionManager: new SessionManager(),
     promptRegistry: new PromptRegistry(storage),
+    policyEngine,
   }));
   return { app, storage, token: raw };
 }

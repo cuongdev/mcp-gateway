@@ -7,7 +7,7 @@ import { PromptRegistry } from '../../src/registry/prompt.registry.js';
 import { SessionManager } from '../../src/session/session.manager.js';
 import { createAdminRoutes } from '../../src/routes/admin.routes.js';
 import { createAuthRoutes } from '../../src/routes/auth.routes.js';
-import { initializeEnforcer } from '../../src/middleware/authz/policy.engine.js';
+import { PolicyEngine } from '../../src/middleware/authz/policy.engine.js';
 import { GatewayConfigSchema, type GatewayConfig } from '../../src/config/schema.js';
 import { newId } from '../../src/utils/uuid.js';
 import { hashSecret } from '../../src/utils/crypto.js';
@@ -30,17 +30,22 @@ async function setup() {
     gateway: { port: 3001, host: '127.0.0.1' },
     authorization: { enabled: true, modelFile: './config/policy.model.conf', policyFile: './config/policy.csv' },
   });
-  await initializeEnforcer(config.authorization);
+  const policyEngine = new PolicyEngine({
+    storage,
+    modelFile: config.authorization.modelFile,
+  });
+  await policyEngine.load();
 
   const registry = new ToolRegistry(storage);
   const app = new Hono();
   app.use('*', bearerTokenMiddleware({ storage }));
-  app.route('/auth', createAuthRoutes(config, { storage }));
+  app.route('/auth', createAuthRoutes(config, { storage, policyEngine }));
   app.route('/api', createAdminRoutes({
     config, storage, toolRegistry: registry,
     toolGroups: new ToolGroupManager(storage, registry),
     sessionManager: new SessionManager(),
     promptRegistry: new PromptRegistry(storage),
+    policyEngine,
   }));
   return { app, storage, token: raw, email: 'alice@example.com' };
 }

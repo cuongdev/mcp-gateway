@@ -2,9 +2,11 @@ import { Hono } from 'hono';
 import { redactConfig } from '../../config/redact.js';
 import type { GatewayConfig } from '../../config/schema.js';
 import type { GatewayVariables } from '../../middleware/types.js';
+import type { PolicyEngine } from '../../middleware/authz/policy.engine.js';
 
 export interface SystemInfoRoutesDeps {
   config: GatewayConfig;
+  policyEngine: PolicyEngine;
 }
 
 /**
@@ -21,8 +23,7 @@ export function createSystemInfoRoutes(deps: SystemInfoRoutesDeps) {
     const subject = principal.email ?? principal.id;
     let isAdmin = false;
     try {
-      const { listRoleBindings } = await import('../../middleware/authz/policy.engine.js');
-      const bindings = await listRoleBindings();
+      const bindings = await deps.policyEngine.listRoleBindings();
       isAdmin = bindings.some((b) => b.user === subject && b.role === 'admin');
     } catch {
       isAdmin = false;

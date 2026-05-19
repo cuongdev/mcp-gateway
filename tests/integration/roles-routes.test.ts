@@ -5,7 +5,7 @@ import { ToolRegistry } from '../../src/registry/tool.registry.js';
 import { ToolGroupManager } from '../../src/registry/tool.groups.js';
 import { PromptRegistry } from '../../src/registry/prompt.registry.js';
 import { SessionManager } from '../../src/session/session.manager.js';
-import { initializeEnforcer } from '../../src/middleware/authz/policy.engine.js';
+import { PolicyEngine } from '../../src/middleware/authz/policy.engine.js';
 import { createAdminRoutes } from '../../src/routes/admin.routes.js';
 import { newId } from '../../src/utils/uuid.js';
 import { hashSecret } from '../../src/utils/crypto.js';
@@ -22,11 +22,11 @@ async function setup() {
     id: newId(), principalId: id, prefix: computePrefix(raw), hash: await hashSecret(raw),
   });
 
-  // Initialize the module-level Casbin enforcer used by the legacy function API
-  await initializeEnforcer({
+  const policyEngine = new PolicyEngine({
+    storage,
     modelFile: './config/policy.model.conf',
-    policyFile: './config/policy.csv',
   });
+  await policyEngine.load();
 
   const registry = new ToolRegistry(storage);
   const app = new Hono();
@@ -37,6 +37,7 @@ async function setup() {
     toolGroups: new ToolGroupManager(storage, registry),
     sessionManager: new SessionManager(),
     promptRegistry: new PromptRegistry(storage),
+    policyEngine,
   }));
   return { app, storage, token: raw };
 }

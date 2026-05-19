@@ -5,6 +5,11 @@
 // P0-T26: Policies are loaded from a PolicyRepo (StorageAdapter)
 // rather than from a CSV file. The CSV is reconstructed in memory
 // from DB rows and fed to Casbin via StringAdapter.
+//
+// Phase F: the legacy module-level singleton + function API have
+// been removed. All consumers receive a `PolicyEngine` instance
+// via dependency injection (see gateway.ts and the route
+// factories).
 // ============================================================
 
 import { newEnforcer, StringAdapter, type Enforcer } from "casbin";
@@ -70,11 +75,6 @@ export class PolicyEngine {
     // there are no policy rules (e.g. fresh / development database).
     const adapter = new StringAdapter(csv || "# no rules");
     this.enforcer = await newEnforcer(this.opts.modelFile, adapter);
-    // Also populate the module-level singleton so legacy admin route
-    // handlers (listPolicies, addRoleForUser, listRoleBindings, etc.)
-    // that read `enforcer` directly work on a freshly-booted gateway.
-    // See FLAG at line 173-176 for the planned migration away from this.
-    enforcer = this.enforcer;
     decisionCache.clear();
     log.info(
       { model: this.opts.modelFile, rules: rules.length },
@@ -102,7 +102,7 @@ export class PolicyEngine {
 
   /**
    * Direct access to the underlying Casbin enforcer (read-only callers
-   * such as response.filter.ts and tool.authorizer.ts).
+   * such as response.filter.ts).
    */
   getEnforcer(): Enforcer {
     if (!this.enforcer) {
@@ -163,62 +163,37 @@ export class PolicyEngine {
     await this.reload();
     return true;
   }
+
+  /** Remove a `g, user, role` grouping rule and reload. */
+  async removeRoleForUser(user: string, role: string): Promise<boolean> {
+    const all = await this.opts.storage.policies.list();
+    const target = ["g", user, role].join("|");
+    const remaining = all.filter(
+      (r) => [r.ptype, ...r.values].join("|") !== target
+    );
+    const removed = remaining.length !== all.length;
+    if (removed) {
+      await this.opts.storage.policies.replaceAll(remaining);
+      await this.reload();
+    }
+    return removed;
+  }
+
+  /** List all `g, user, role` grouping rules. */
+  async listRoleBindings(): Promise<{ user: string; role: string }[]> {
+    if (!this.enforcer) {
+      throw new Error("PolicyEngine not loaded — call load() first");
+    }
+    const grouping = await this.enforcer.getGroupingPolicy();
+    return grouping
+      .filter((row) => row.length >= 2)
+      .map((row) => ({ user: row[0]!, role: row[1]! }));
+  }
 }
 
 // ============================================================
-// Module-level singleton + legacy function API
-//
-// Existing call sites (middleware/index.ts, response.filter.ts,
-// routes/admin.routes.ts) consume the function-based API below.
-// They will be migrated to receive a `PolicyEngine` instance via
-// constructor injection in a follow-up; until then the legacy
-// functions remain as thin wrappers around a module-level
-// Casbin enforcer.
-//
-// FLAG (T26 follow-up): wire `gateway.ts` to construct a
-// `PolicyEngine` with `{ storage, modelFile }` and pass it down
-// to `buildMiddlewarePipeline`, `createAdminRoutes`, and the
-// response filter, then remove the legacy file-based path here.
+// Authorization middleware
 // ============================================================
-
-let enforcer: Enforcer | null = null;
-
-/**
- * @deprecated Use `new PolicyEngine({ storage, modelFile }).load()`.
- * Legacy file-adapter init kept for backward compatibility with
- * existing call sites until they are migrated.
- */
-export async function initializeEnforcer(
-  config: AuthorizationConfig
-): Promise<Enforcer> {
-  if (enforcer) return enforcer;
-
-  log.info(
-    { model: config.modelFile, policy: config.policyFile },
-    "Initializing Casbin enforcer (legacy file adapter)"
-  );
-
-  enforcer = await newEnforcer(config.modelFile, config.policyFile);
-  log.info("Casbin enforcer initialized");
-  return enforcer;
-}
-
-/**
- * Get the current enforcer instance.
- */
-export function getEnforcer(): Enforcer | null {
-  return enforcer;
-}
-
-/**
- * Reload policies from the legacy file source.
- */
-export async function reloadPolicies(): Promise<void> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  await enforcer.loadPolicy();
-  decisionCache.clear();
-  log.info("Policies reloaded");
-}
 
 /**
  * Creates the authorization middleware.
@@ -228,22 +203,15 @@ export async function reloadPolicies(): Promise<void> {
  * 2. Determines the action (tool name, resource, etc.)
  * 3. Evaluates Casbin policy
  * 4. Allows or denies the request
+ *
+ * The caller is responsible for ensuring `engine.load()` has
+ * been awaited before any request hits this middleware.
  */
 export function createAuthzMiddleware(
-  config: AuthorizationConfig
+  engine: PolicyEngine,
+  config: AuthorizationConfig,
 ): MiddlewareHandler<{ Variables: GatewayVariables }> {
-  // Initialize enforcer on first request (lazy)
-  let initPromise: Promise<Enforcer> | null = null;
-
   return async (c, next) => {
-    // Lazy initialization
-    if (!enforcer) {
-      if (!initPromise) {
-        initPromise = initializeEnforcer(config);
-      }
-      await initPromise;
-    }
-
     const user = c.get("user");
     const ctx = c.get("gatewayCtx");
 
@@ -268,7 +236,7 @@ export function createAuthzMiddleware(
     let decision: AuthzDecision;
 
     try {
-      decision = await evaluatePolicy(user.sub, user.roles, body.method, body.params, config);
+      decision = await evaluatePolicy(engine.getEnforcer(), user.sub, user.roles, body.method, body.params, config);
     } catch (err) {
       log.error({ err, user: user.sub }, "Policy evaluation failed");
       decision = {
@@ -325,21 +293,13 @@ export function createAuthzMiddleware(
  * - ReBAC: (user, relationship, resource)
  */
 async function evaluatePolicy(
+  enforcer: Enforcer,
   userId: string,
   roles: string[],
   method: string,
   params: Record<string, unknown> | undefined,
   config: AuthorizationConfig
 ): Promise<AuthzDecision> {
-  if (!enforcer) {
-    return {
-      allowed: config.defaultDecision === "allow",
-      reason: "Enforcer not initialized",
-      evaluationTimeMs: 0,
-      model: "rbac",
-    };
-  }
-
   // Determine the resource/object being accessed
   const resource = extractResource(method, params);
   const action = extractAction(method);
@@ -433,71 +393,4 @@ function extractAction(method: string): string {
   if (method.includes("call") || method.includes("get")) return "execute";
   if (method.includes("subscribe")) return "subscribe";
   return "execute";
-}
-
-/**
- * Admin API: Add a new policy rule at runtime.
- */
-export async function addPolicy(
-  sub: string,
-  obj: string,
-  act: string
-): Promise<boolean> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  decisionCache.clear();
-  return enforcer.addPolicy(sub, obj, act);
-}
-
-/**
- * Admin API: Remove a policy rule at runtime.
- */
-export async function removePolicy(
-  sub: string,
-  obj: string,
-  act: string
-): Promise<boolean> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  decisionCache.clear();
-  return enforcer.removePolicy(sub, obj, act);
-}
-
-/**
- * Admin API: Add a role assignment.
- */
-export async function addRoleForUser(
-  user: string,
-  role: string
-): Promise<boolean> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  decisionCache.clear();
-  return enforcer.addRoleForUser(user, role);
-}
-
-/**
- * Admin API: List all role bindings (Casbin g-rules) as
- * { user, role } pairs.
- */
-export async function listRoleBindings(): Promise<{ user: string; role: string }[]> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  const grouping = await enforcer.getGroupingPolicy();
-  return grouping
-    .filter((row) => row.length >= 2)
-    .map((row) => ({ user: row[0]!, role: row[1]! }));
-}
-
-/**
- * Admin API: Remove a role binding (Casbin g-rule).
- */
-export async function removeRoleForUser(user: string, role: string): Promise<boolean> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  decisionCache.clear();
-  return enforcer.deleteRoleForUser(user, role);
-}
-
-/**
- * Admin API: List all policies.
- */
-export async function listPolicies(): Promise<string[][]> {
-  if (!enforcer) throw new Error("Enforcer not initialized");
-  return enforcer.getPolicy();
 }

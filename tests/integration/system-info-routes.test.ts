@@ -6,7 +6,7 @@ import { ToolGroupManager } from '../../src/registry/tool.groups.js';
 import { PromptRegistry } from '../../src/registry/prompt.registry.js';
 import { SessionManager } from '../../src/session/session.manager.js';
 import { createAdminRoutes } from '../../src/routes/admin.routes.js';
-import { initializeEnforcer, addRoleForUser } from '../../src/middleware/authz/policy.engine.js';
+import { PolicyEngine } from '../../src/middleware/authz/policy.engine.js';
 import { newId } from '../../src/utils/uuid.js';
 import { hashSecret } from '../../src/utils/crypto.js';
 import { generateToken, computePrefix } from '../../src/identity/token.js';
@@ -21,14 +21,12 @@ async function setup() {
   await storage.tokens.create({
     id: newId(), principalId: id, prefix: computePrefix(raw), hash: await hashSecret(raw),
   });
-  await initializeEnforcer({
-    enabled: true,
+  const policyEngine = new PolicyEngine({
+    storage,
     modelFile: './config/policy.model.conf',
-    policyFile: './config/policy.csv',
-    defaultDecision: 'deny',
-    cache: { enabled: true, ttl: 600 },
   });
-  await addRoleForUser(id, 'admin');
+  await policyEngine.load();
+  await policyEngine.addRoleForUser(id, 'admin');
   const registry = new ToolRegistry(storage);
   const app = new Hono();
   const config = {
@@ -58,6 +56,7 @@ async function setup() {
     toolGroups: new ToolGroupManager(storage, registry),
     sessionManager: new SessionManager(),
     promptRegistry: new PromptRegistry(storage),
+    policyEngine,
   }));
   return { app, storage, token: raw };
 }
