@@ -70,6 +70,11 @@ export class PolicyEngine {
     // there are no policy rules (e.g. fresh / development database).
     const adapter = new StringAdapter(csv || "# no rules");
     this.enforcer = await newEnforcer(this.opts.modelFile, adapter);
+    // Also populate the module-level singleton so legacy admin route
+    // handlers (listPolicies, addRoleForUser, listRoleBindings, etc.)
+    // that read `enforcer` directly work on a freshly-booted gateway.
+    // See FLAG at line 173-176 for the planned migration away from this.
+    enforcer = this.enforcer;
     decisionCache.clear();
     log.info(
       { model: this.opts.modelFile, rules: rules.length },

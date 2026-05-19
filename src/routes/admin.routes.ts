@@ -626,15 +626,25 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   });
 
   app.post("/policies", async (c) => {
-    const { sub, obj, act } = await c.req.json();
-    const added = await addPolicy(sub, obj, act);
-    return c.json({ added });
+    try {
+      const { sub, obj, act } = await c.req.json();
+      const added = await addPolicy(sub, obj, act);
+      return c.json({ added });
+    } catch (err) {
+      log.warn({ err }, "addPolicy failed");
+      return c.json({ error: "Failed to add policy" }, 500);
+    }
   });
 
   app.delete("/policies", async (c) => {
-    const { sub, obj, act } = await c.req.json();
-    const removed = await removePolicy(sub, obj, act);
-    return c.json({ removed });
+    try {
+      const { sub, obj, act } = await c.req.json();
+      const removed = await removePolicy(sub, obj, act);
+      return c.json({ removed });
+    } catch (err) {
+      log.warn({ err }, "removePolicy failed");
+      return c.json({ error: "Failed to remove policy" }, 500);
+    }
   });
 
   app.post("/policies/reload", async (c) => {
@@ -656,15 +666,25 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   });
 
   app.post("/roles", async (c) => {
-    const { user, role } = await c.req.json();
-    const added = await addRoleForUser(user, role);
-    return c.json({ added });
+    try {
+      const { user, role } = await c.req.json();
+      const added = await addRoleForUser(user, role);
+      return c.json({ added });
+    } catch (err) {
+      log.warn({ err }, "addRoleForUser failed");
+      return c.json({ error: "Failed to add role" }, 500);
+    }
   });
 
   app.delete("/roles", async (c) => {
-    const { user, role } = await c.req.json();
-    const removed = await removeRoleForUser(user, role);
-    return c.json({ removed });
+    try {
+      const { user, role } = await c.req.json();
+      const removed = await removeRoleForUser(user, role);
+      return c.json({ removed });
+    } catch (err) {
+      log.warn({ err }, "removeRoleForUser failed");
+      return c.json({ error: "Failed to remove role" }, 500);
+    }
   });
 
   // ═══════════════════════════════════════════════════════

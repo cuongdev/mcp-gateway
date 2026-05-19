@@ -260,6 +260,14 @@ export class Gateway {
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
 
+    // Wire the module-level Casbin singleton too — admin route handlers
+    // (`listPolicies`, `addRoleForUser`, `listRoleBindings`, etc.) read
+    // from it directly. Without this, `/api/policies` and `/api/roles`
+    // return 500 on a freshly-booted gateway. See FLAG at
+    // src/middleware/authz/policy.engine.ts:173-176.
+    const { initializeEnforcer } = await import("./middleware/authz/policy.engine.js");
+    await initializeEnforcer(this.config.authorization);
+
     // Bootstrap config-declared servers + groups into storage
     // (idempotent, additive). Runtime-registered entries absent from
     // config are preserved. OpenAPI transports are skipped — register
