@@ -45,6 +45,7 @@ const WebhooksPage = lazy(() => import('@/features/webhooks/page').then((m) => (
 const WebhookNewSheet = lazy(() => import('@/features/webhooks/new-sheet').then((m) => ({ default: m.WebhookNewSheet })));
 const HealthPage = lazy(() => import('@/features/health/page').then((m) => ({ default: m.HealthPage })));
 const SettingsPage = lazy(() => import('@/features/settings/page').then((m) => ({ default: m.SettingsPage })));
+const MetricsPage = lazy(() => import('@/features/metrics/page').then((m) => ({ default: m.MetricsPage })));
 
 function RouteSuspenseFallback() {
   return (
@@ -101,7 +102,7 @@ export function App() {
                 {/* OBSERVABILITY */}
                 <Route path="/usage" element={<UsagePage />} />
                 <Route path="/audit" element={<AuditPage />} />
-                <Route path="/metrics" element={<ComingSoon phase="E" title="Metrics" />} />
+                <Route path="/metrics" element={<MetricsPage />} />
                 <Route path="/health" element={<HealthPage />} />
                 {/* SYSTEM */}
                 <Route path="/tenants/*" element={<ComingSoon phase="E" title="Tenants" />} />
