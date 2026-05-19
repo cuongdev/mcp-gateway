@@ -74,6 +74,32 @@ export class AuditRepo {
     return r.rows.map(rowToEntry);
   }
 
+  async list(opts: {
+    since?: number;
+    until?: number;
+    principalId?: string;
+    action?: string;
+    result?: 'success' | 'denied' | 'error';
+    limit?: number;
+  }): Promise<AuditEntry[]> {
+    const limit = Math.min(opts.limit ?? 100, 500);
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (opts.since !== undefined) { where.push('ts >= ?'); params.push(opts.since); }
+    if (opts.until !== undefined) { where.push('ts <= ?'); params.push(opts.until); }
+    if (opts.principalId !== undefined) { where.push('principal_id = ?'); params.push(opts.principalId); }
+    if (opts.action !== undefined) { where.push('action = ?'); params.push(opts.action); }
+    if (opts.result !== undefined) { where.push('result = ?'); params.push(opts.result); }
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const r = await this.client.execute({
+      sql: `SELECT id, ts, principal_id, principal_type, action, resource, result, duration_ms, metadata
+            FROM audit_logs ${whereSql}
+            ORDER BY ts DESC LIMIT ?`,
+      args: [...params, limit],
+    });
+    return r.rows.map(rowToEntry);
+  }
+
   async aggregateUsage(opts: AggregateUsageOptions): Promise<UsageBucket[]> {
     const action = opts.action ?? 'tool.call';
     const since = opts.since ?? 0;

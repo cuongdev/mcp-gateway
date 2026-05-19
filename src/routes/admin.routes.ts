@@ -55,6 +55,7 @@ import { createUsersRoutes } from "./admin/users.routes.js";
 import { createTokensRoutes } from "./admin/tokens.routes.js";
 import { createPromptsRoutes } from "./admin/prompts.routes.js";
 import { createUsageRoutes } from "./admin/usage.routes.js";
+import { createAuditRoutes } from "./admin/audit.routes.js";
 import { createCacheRoutes } from "./admin/cache.routes.js";
 import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
 import type { ToolCache } from "../cache/interface.js";
@@ -699,6 +700,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.route("/users", createUsersRoutes({ storage }));
   app.route("/prompts", createPromptsRoutes({ promptRegistry: deps.promptRegistry }));
   app.route("/usage", createUsageRoutes({ storage }));
+  app.route("/audit", createAuditRoutes({ storage }));
   app.route("/system/info", createSystemInfoRoutes({ config, policyEngine }));
 
   if (deps.cache) {

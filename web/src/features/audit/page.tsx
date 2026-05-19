@@ -7,10 +7,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/empty-state';
-import { useAudit } from './api';
+import { useAuditEvents } from './api';
 
-type GroupBy = 'principal' | 'tool' | 'server';
 type RangePreset = '1h' | '24h' | '7d';
+type ResultFilter = 'all' | 'success' | 'denied' | 'error';
 
 const PRESETS: Record<RangePreset, number> = {
   '1h':  60 * 60 * 1000,
@@ -18,21 +18,36 @@ const PRESETS: Record<RangePreset, number> = {
   '7d':   7 * 24 * 60 * 60 * 1000,
 };
 
+function resultBadge(result: string) {
+  if (result === 'success') return <Badge variant="secondary">success</Badge>;
+  if (result === 'denied') return <Badge variant="outline">denied</Badge>;
+  return <Badge variant="destructive">error</Badge>;
+}
+
 export function AuditPage() {
-  const [by, setBy] = useState<GroupBy>('principal');
   const [preset, setPreset] = useState<RangePreset>('24h');
-  const [action, setAction] = useState<string>('tool.call');
+  const [action, setAction] = useState<string>('');
+  const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [search, setSearch] = useState('');
   const [nowMinute, setNowMinute] = useState(() => Math.floor(Date.now() / 60_000));
+
   useEffect(() => {
     const id = setInterval(() => setNowMinute(Math.floor(Date.now() / 60_000)), 60_000);
     return () => clearInterval(id);
   }, []);
+
   const since = useMemo(() => nowMinute * 60_000 - PRESETS[preset], [preset, nowMinute]);
 
-  const { data } = useAudit({ since, by, action: action || undefined });
-  const rows = (data?.series ?? []).filter((r) =>
-    search === '' || r.key.toLowerCase().includes(search.toLowerCase()),
+  const { data } = useAuditEvents({
+    since,
+    action: action || undefined,
+    result: resultFilter === 'all' ? undefined : resultFilter,
+    limit: 200,
+  });
+  const events = (data?.events ?? []).filter((e) =>
+    search === '' ||
+    (e.principalId ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (e.resource ?? '').toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -40,7 +55,7 @@ export function AuditPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Audit</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Aggregated audit log — counts grouped by {by} over the last {preset}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Per-event audit log — last {preset}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-md border border-border p-0.5">
@@ -54,12 +69,13 @@ export function AuditPage() {
               </button>
             ))}
           </div>
-          <Select value={by} onValueChange={(v) => setBy(v as GroupBy)}>
-            <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+          <Select value={resultFilter} onValueChange={(v) => setResultFilter(v as ResultFilter)}>
+            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="principal">By principal</SelectItem>
-              <SelectItem value="tool">By tool</SelectItem>
-              <SelectItem value="server">By server</SelectItem>
+              <SelectItem value="all">All results</SelectItem>
+              <SelectItem value="success">success</SelectItem>
+              <SelectItem value="denied">denied</SelectItem>
+              <SelectItem value="error">error</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -67,12 +83,12 @@ export function AuditPage() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
-          placeholder={`Search ${by}…`}
+          placeholder="Search principalId or resource…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <Input
-          placeholder="Action filter (default: tool.call)"
+          placeholder="Action filter (e.g. tool.call)"
           value={action}
           onChange={(e) => setAction(e.target.value)}
         />
@@ -81,22 +97,27 @@ export function AuditPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            {rows.length} entries · action="{action || 'all'}"
+            {events.length} events
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
-            <EmptyState icon={ScrollText} title="No audit data in this range" description="Audit entries appear here once tools have been called." />
+          {events.length === 0 ? (
+            <EmptyState icon={ScrollText} title="No audit events in this range" description="Events appear here as tools are called and policies are evaluated." />
           ) : (
             <ul className="divide-y divide-border">
-              {rows.map((r) => (
-                <li key={r.key} className="flex items-center justify-between gap-4 py-2 text-sm">
-                  <code className="font-mono">{r.key}</code>
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge variant="secondary">success {r.success}</Badge>
-                    {r.denied > 0 && <Badge variant="outline">denied {r.denied}</Badge>}
-                    {r.error > 0 && <Badge variant="destructive">error {r.error}</Badge>}
-                    <span className="ml-2 font-medium tabular-nums">{r.total}</span>
+              {events.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-4 py-2 text-sm">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <code className="font-mono text-xs text-muted-foreground">{new Date(e.ts).toLocaleString()}</code>
+                      <code className="font-mono text-xs text-primary">{e.action}</code>
+                      {e.resource && <code className="font-mono text-xs">{e.resource}</code>}
+                    </div>
+                    {e.principalId && <span className="text-xs text-muted-foreground">by <code className="font-mono">{e.principalId}</code></span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {resultBadge(e.result)}
+                    {e.durationMs !== undefined && <span className="text-xs text-muted-foreground tabular-nums">{e.durationMs}ms</span>}
                   </div>
                 </li>
               ))}

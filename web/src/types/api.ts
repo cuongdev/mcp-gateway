@@ -223,3 +223,15 @@ export interface HealthCheckResult {
 
 /** Opaque GatewayConfig for the Settings page — displayed as JSON. */
 export type GatewayConfig = Record<string, unknown>;
+
+export interface AuditEntry {
+  id: string;
+  ts: number;
+  principalId?: string;
+  principalType?: string;
+  action: string;
+  resource?: string;
+  result: 'success' | 'denied' | 'error';
+  durationMs?: number;
+  metadata?: Record<string, unknown>;
+}

@@ -10,5 +10,5 @@ test('Audit page renders empty state + filters', async ({ page }) => {
   await enterDevMode(page, '/dashboard/audit');
   await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByPlaceholder(/Action filter/i)).toBeVisible();
-  await expect(page.getByText('No audit data in this range')).toBeVisible();
+  await expect(page.getByText('No audit events in this range')).toBeVisible();
 });
