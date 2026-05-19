@@ -255,41 +255,45 @@ export class SessionManager {
    *   3. POST  tools/list  → get tool list
    */
   async discoverTools(serverName: string): Promise<any[]> {
-    // 1. Initialize handshake
-    const initResponse = await this.send(serverName, {
-      jsonrpc: "2.0",
-      id: `init-${serverName}-${Date.now()}`,
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: { tools: {} },
-        clientInfo: { name: "mcp-gateway", version: "0.1.0" },
-      },
-    });
+    return withSpan('mcp.tools.discover', { 'server.name': serverName }, async (span) => {
+      // 1. Initialize handshake
+      const initResponse = await this.send(serverName, {
+        jsonrpc: "2.0",
+        id: `init-${serverName}-${Date.now()}`,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "mcp-gateway", version: "0.1.0" },
+        },
+      });
 
-    if (initResponse.error) {
-      throw new UpstreamConnectionError(
-        serverName,
-        `Initialize failed: ${initResponse.error.message}`
+      if (initResponse.error) {
+        throw new UpstreamConnectionError(
+          serverName,
+          `Initialize failed: ${initResponse.error.message}`
+        );
+      }
+
+      log.debug(
+        { server: serverName, serverInfo: (initResponse.result as any)?.serverInfo },
+        "MCP handshake complete"
       );
-    }
 
-    log.debug(
-      { server: serverName, serverInfo: (initResponse.result as any)?.serverInfo },
-      "MCP handshake complete"
-    );
+      // 2. Send initialized notification (no response expected)
+      this.sendNotification(serverName, { jsonrpc: "2.0", method: "notifications/initialized" });
 
-    // 2. Send initialized notification (no response expected)
-    this.sendNotification(serverName, { jsonrpc: "2.0", method: "notifications/initialized" });
+      // 3. List tools
+      const toolsResponse = await this.send(serverName, {
+        jsonrpc: "2.0",
+        id: `tools-${serverName}-${Date.now()}`,
+        method: "tools/list",
+      });
 
-    // 3. List tools
-    const toolsResponse = await this.send(serverName, {
-      jsonrpc: "2.0",
-      id: `tools-${serverName}-${Date.now()}`,
-      method: "tools/list",
+      const tools = (toolsResponse.result as any)?.tools ?? [];
+      span.setAttribute('tools.count', tools.length);
+      return tools;
     });
-
-    return (toolsResponse.result as any)?.tools ?? [];
   }
 
   /**
@@ -300,24 +304,28 @@ export class SessionManager {
    * or if any error occurs.
    */
   async discoverPrompts(serverName: string): Promise<DiscoveredPrompt[]> {
-    const request: JsonRpcRequest = {
-      jsonrpc: "2.0",
-      id: `prompts-${serverName}-${Date.now()}`,
-      method: "prompts/list",
-    };
-    try {
-      const result = await this.send(serverName, request) as {
-        result?: { prompts?: Array<{ name: string; description?: string; arguments?: unknown }> };
+    return withSpan('mcp.prompts.discover', { 'server.name': serverName }, async (span) => {
+      const request: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        id: `prompts-${serverName}-${Date.now()}`,
+        method: "prompts/list",
       };
-      const prompts = (result as any)?.result?.prompts ?? [];
-      return prompts.map((p: { name: string; description?: string; arguments?: unknown }) => ({
-        originalName: p.name,
-        description: p.description ?? "",
-        argumentsSchema: argsToJsonSchema(p.arguments),
-      }));
-    } catch {
-      return [];
-    }
+      try {
+        const result = await this.send(serverName, request) as {
+          result?: { prompts?: Array<{ name: string; description?: string; arguments?: unknown }> };
+        };
+        const prompts = (result as any)?.result?.prompts ?? [];
+        span.setAttribute('prompts.count', prompts.length);
+        return prompts.map((p: { name: string; description?: string; arguments?: unknown }) => ({
+          originalName: p.name,
+          description: p.description ?? "",
+          argumentsSchema: argsToJsonSchema(p.arguments),
+        }));
+      } catch {
+        span.setAttribute('prompts.count', 0);
+        return [];
+      }
+    });
   }
 
   /**

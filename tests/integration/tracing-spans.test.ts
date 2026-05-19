@@ -7,6 +7,9 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { withSpan, currentTraceparent } from '../../src/observability/spans.js';
+import { createServer } from 'node:http';
+import { SessionManager } from '../../src/session/session.manager.js';
+import { SqliteAdapter } from '../../src/storage/sqlite.adapter.js';
 
 // Use BasicTracerProvider directly instead of NodeSDK — within a single
 // test process, NodeSDK's resource detector + register() chain is non-deterministic
@@ -86,5 +89,92 @@ describe('OTel spans', () => {
     expect(tp).toBeDefined();
     // 00-<32 hex>-<16 hex>-<2 hex>
     expect(tp).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/);
+  });
+
+  it('storage.transaction wraps each transaction call in a span', async () => {
+    exporter.reset();
+
+    const storage = new SqliteAdapter({ url: ':memory:' });
+    await storage.init();
+
+    await storage.transaction(async (tx) => {
+      await tx.query('SELECT 1');
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const txSpan = spans.find((s) => s.name === 'storage.transaction');
+    expect(txSpan).toBeDefined();
+    expect(txSpan?.attributes['storage.driver']).toBe('sqlite');
+    // Status code 1 = OK
+    expect(txSpan?.status.code).toBe(1);
+
+    storage.close();
+  });
+
+  it('mcp.tools.discover span emitted when discoverTools is called', async () => {
+    exporter.reset();
+
+    // Spin up a minimal mock MCP server: responds to initialize + tools/list
+    const server = createServer((req, res) => {
+      let buf = '';
+      req.on('data', (c) => (buf += c));
+      req.on('end', () => {
+        let body: { method?: string } = {};
+        try { body = JSON.parse(buf); } catch { /* ignore */ }
+        res.setHeader('content-type', 'application/json');
+        if (body.method === 'initialize') {
+          res.end(JSON.stringify({ result: { protocolVersion: '2024-11-05', capabilities: {} } }));
+        } else if (body.method === 'tools/list') {
+          res.end(JSON.stringify({ result: { tools: [{ name: 'echo', description: 'echoes' }] } }));
+        } else {
+          res.end(JSON.stringify({ result: {} }));
+        }
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const port = (server.address() as { port: number }).port;
+
+    const mgr = new SessionManager();
+    mgr.register('s', { type: 'streamable-http', url: `http://127.0.0.1:${port}/mcp` });
+
+    await mgr.discoverTools('s');
+
+    const spans = exporter.getFinishedSpans();
+    const discoverSpan = spans.find((s) => s.name === 'mcp.tools.discover');
+    expect(discoverSpan).toBeDefined();
+    expect(discoverSpan?.attributes['server.name']).toBe('s');
+    expect(discoverSpan?.attributes['tools.count']).toBe(1);
+    expect(discoverSpan?.status.code).toBe(1);
+
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('mcp.prompts.discover span emitted when discoverPrompts is called', async () => {
+    exporter.reset();
+
+    const server = createServer((req, res) => {
+      let buf = '';
+      req.on('data', (c) => (buf += c));
+      req.on('end', () => {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ result: { prompts: [{ name: 'greet', description: 'greeting' }] } }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const port = (server.address() as { port: number }).port;
+
+    const mgr = new SessionManager();
+    mgr.register('s', { type: 'streamable-http', url: `http://127.0.0.1:${port}/mcp` });
+
+    await mgr.discoverPrompts('s');
+
+    const spans = exporter.getFinishedSpans();
+    const discoverSpan = spans.find((s) => s.name === 'mcp.prompts.discover');
+    expect(discoverSpan).toBeDefined();
+    expect(discoverSpan?.attributes['server.name']).toBe('s');
+    expect(discoverSpan?.attributes['prompts.count']).toBe(1);
+    expect(discoverSpan?.status.code).toBe(1);
+
+    await new Promise<void>((r) => server.close(() => r()));
   });
 });

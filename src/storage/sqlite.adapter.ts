@@ -1,4 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
+import { withSpan } from '../observability/spans.js';
 import type { StorageAdapter, Tx } from './adapter.js';
 import { MigrationRunner } from './migration.runner.js';
 import { PrincipalRepo } from './repositories/principal.repo.js';
@@ -75,32 +76,34 @@ export class SqliteAdapter implements StorageAdapter {
   }
 
   async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-    // Use manual BEGIN/COMMIT/ROLLBACK via client.execute() so that all statements
-    // stay on the same underlying connection.  libsql's transaction() API hands off
-    // the connection and lazily creates a new one for subsequent client.execute()
-    // calls, which breaks :memory: databases (each new connection is empty).
-    await this.client.execute('BEGIN');
-    const wrapper: Tx = {
-      execute: async (sql, params = []) => {
-        const r = await this.client.execute({ sql, args: params as never });
-        return { rowsAffected: r.rowsAffected, lastInsertRowid: r.lastInsertRowid as bigint | undefined };
-      },
-      query: async (sql, params = []) => {
-        const r = await this.client.execute({ sql, args: params as never });
-        return r.rows as never;
-      },
-      queryOne: async (sql, params = []) => {
-        const r = await this.client.execute({ sql, args: params as never });
-        return (r.rows[0] ?? null) as never;
-      },
-    };
-    try {
-      const out = await fn(wrapper);
-      await this.client.execute('COMMIT');
-      return out;
-    } catch (err) {
-      await this.client.execute('ROLLBACK').catch(() => undefined);
-      throw err;
-    }
+    return withSpan('storage.transaction', { 'storage.driver': 'sqlite' }, async () => {
+      // Use manual BEGIN/COMMIT/ROLLBACK via client.execute() so that all statements
+      // stay on the same underlying connection.  libsql's transaction() API hands off
+      // the connection and lazily creates a new one for subsequent client.execute()
+      // calls, which breaks :memory: databases (each new connection is empty).
+      await this.client.execute('BEGIN');
+      const wrapper: Tx = {
+        execute: async (sql, params = []) => {
+          const r = await this.client.execute({ sql, args: params as never });
+          return { rowsAffected: r.rowsAffected, lastInsertRowid: r.lastInsertRowid as bigint | undefined };
+        },
+        query: async (sql, params = []) => {
+          const r = await this.client.execute({ sql, args: params as never });
+          return r.rows as never;
+        },
+        queryOne: async (sql, params = []) => {
+          const r = await this.client.execute({ sql, args: params as never });
+          return (r.rows[0] ?? null) as never;
+        },
+      };
+      try {
+        const out = await fn(wrapper);
+        await this.client.execute('COMMIT');
+        return out;
+      } catch (err) {
+        await this.client.execute('ROLLBACK').catch(() => undefined);
+        throw err;
+      }
+    });
   }
 }

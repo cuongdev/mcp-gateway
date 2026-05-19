@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { withSpan } from '../observability/spans.js';
 import type { StorageAdapter, Tx } from './adapter.js';
 import { PrincipalRepo } from './repositories/principal.repo.js';
 import { TokenRepo } from './repositories/token.repo.js';
@@ -104,26 +105,28 @@ export class PostgresAdapter implements StorageAdapter {
   }
 
   async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-    const result = await this.sql.begin(async (sqlTx) => {
-      const wrapper: Tx = {
-        async execute(sql, params = []) {
-          const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
-          return { rowsAffected: r.count };
-        },
-        async query(sql, params = []) {
-          const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
-          return r as never;
-        },
-        async queryOne(sql, params = []) {
-          const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
-          return (r[0] ?? null) as never;
-        },
-      };
-      return fn(wrapper);
+    return withSpan('storage.transaction', { 'storage.driver': 'postgres' }, async () => {
+      const result = await this.sql.begin(async (sqlTx) => {
+        const wrapper: Tx = {
+          async execute(sql, params = []) {
+            const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
+            return { rowsAffected: r.count };
+          },
+          async query(sql, params = []) {
+            const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
+            return r as never;
+          },
+          async queryOne(sql, params = []) {
+            const r = await sqlTx.unsafe(rewriteParams(sql), params as never);
+            return (r[0] ?? null) as never;
+          },
+        };
+        return fn(wrapper);
+      });
+      // postgres.js' `begin` callback return type is inferred as `unknown` in some
+      // call sites — cast to `T` since we know the callback returns `T`.
+      return result as T;
     });
-    // postgres.js' `begin` callback return type is inferred as `unknown` in some
-    // call sites — cast to `T` since we know the callback returns `T`.
-    return result as T;
   }
 }
 
