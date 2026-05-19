@@ -10,8 +10,9 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && npm run copy:dashboard",
-    "copy:dashboard": "mkdir -p dist/dashboard && cp src/dashboard/index.html dist/dashboard/index.html",
+    "dev:web": "cd web && npm run dev",
+    "build": "tsc && npm run build:web",
+    "build:web": "cd web && npm run build && rm -rf ../dist/dashboard && mkdir -p ../dist/dashboard && cp -r dist/. ../dist/dashboard/",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
