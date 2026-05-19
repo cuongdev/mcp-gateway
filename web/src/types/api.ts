@@ -18,6 +18,7 @@ export interface ServerSummary {
   name: string;
   tools: string[];
   session: boolean;
+  enabled: boolean;
 }
 
 export interface ToolSummary {

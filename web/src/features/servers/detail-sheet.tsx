@@ -72,7 +72,7 @@ export function ServerDetailSheet() {
               </Label>
               <Switch
                 id="enabled"
-                defaultChecked
+                checked={server.enabled}
                 disabled={patchMut.isPending}
                 onCheckedChange={(checked) => patchMut.mutate({ name: server.name, enabled: checked })}
               />

@@ -123,11 +123,17 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       list.push(t.canonicalName);
       byServer.set(t.serverName, list);
     }
-    const details = Array.from(byServer.entries()).map(([name, tools]) => ({
-      name,
-      tools,
-      session: sessionManager.has(name),
-    }));
+    const details = await Promise.all(
+      Array.from(byServer.entries()).map(async ([name, tools]) => {
+        const row = await storage.servers.findByName(name);
+        return {
+          name,
+          tools,
+          session: sessionManager.has(name),
+          enabled: row?.enabled ?? true,
+        };
+      }),
+    );
     return c.json({ servers: details });
   });
 
