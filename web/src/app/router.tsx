@@ -14,6 +14,9 @@ import { GroupsPage } from '@/features/groups/page';
 import { GroupNewSheet } from '@/features/groups/new-sheet';
 import { GroupDetailSheet } from '@/features/groups/detail-sheet';
 import { PoliciesPage } from '@/features/policies/page';
+import { UsersPage } from '@/features/users/page';
+import { UserNewSheet } from '@/features/users/new-sheet';
+import { UserDetailSheet } from '@/features/users/detail-sheet';
 
 export function App() {
   return (
@@ -40,7 +43,10 @@ export function App() {
               <Route path="/prompts" element={<ComingSoon phase="C" title="Prompts" />} />
               <Route path="/proxies/*" element={<ComingSoon phase="E" title="Outbound Proxies" />} />
               {/* IDENTITY */}
-              <Route path="/users/*" element={<ComingSoon phase="C" title="Users" />} />
+              <Route path="/users" element={<UsersPage />}>
+                <Route path="new" element={<UserNewSheet />} />
+                <Route path=":id" element={<UserDetailSheet />} />
+              </Route>
               <Route path="/mcp-clients/*" element={<ComingSoon phase="C" title="MCP Clients" />} />
               <Route path="/my-tokens" element={<ComingSoon phase="C" title="My Tokens" />} />
               <Route path="/oidc" element={<ComingSoon phase="C" title="OIDC Providers" />} />
