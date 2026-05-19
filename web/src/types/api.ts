@@ -3,8 +3,8 @@ export interface AuthMe {
   type: 'user' | 'service_account' | 'mcp_client';
   email: string | null;
   displayName: string;
-  /** Populated by Phase C backend change; empty until then. */
-  roles?: string[];
+  /** Casbin role bindings for this principal (Phase C). */
+  roles: string[];
 }
 
 export interface AuthProvider {
@@ -94,4 +94,41 @@ export interface UsageResponse {
   by: 'tool' | 'principal' | 'server';
   action: string;
   series: UsageBucket[];
+}
+
+// ── Phase C types ────────────────────────────────────
+
+export interface User {
+  principalId: string;
+  email: string;
+  displayName: string;
+  disabled: boolean;
+  createdAt: number;
+}
+
+export interface McpClient {
+  principalId: string;
+  name: string;
+  description?: string;
+  allowedServers: string[];
+  disabled: boolean;
+  createdAt: number;
+}
+
+export interface PatToken {
+  id: string;
+  prefix: string;
+  name?: string;
+  createdAt: number;
+  lastUsedAt?: number;
+  expiresAt?: number;
+}
+
+export interface PromptSummary {
+  canonicalName: string;
+  serverName: string;
+  originalName: string;
+  description?: string;
+  argumentsSchema?: Record<string, unknown>;
+  enabled: boolean;
 }
