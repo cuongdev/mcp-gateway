@@ -7,29 +7,33 @@
 // Endpoints:
 //   GET    /api/health                — gateway health
 //   GET    /api/metrics               — Prometheus metrics
+//   GET    /api/system/info           — redacted runtime config (admin)
 //
 //   GET    /api/servers               — list registered servers
 //   POST   /api/servers               — register a server
 //   DELETE /api/servers/:name         — deregister a server
+//   PATCH  /api/servers/:name         — enable/disable, proxyName
 //   POST   /api/servers/:name/sync    — re-sync tools from server
 //
 //   GET    /api/tools                 — list all tools
 //   PUT    /api/tools/:name/enable    — enable a tool
 //   PUT    /api/tools/:name/disable   — disable a tool
+//   PATCH  /api/tools/:name           — cache flags + sensitive
 //
 //   GET    /api/groups                — list tool groups
 //   POST   /api/groups                — create a group
 //   GET    /api/groups/:name          — get group details
-//   PUT    /api/groups/:name          — update a group
+//   PATCH  /api/groups/:name          — update a group
 //   DELETE /api/groups/:name          — delete a group
-//   POST   /api/groups/:name/tools    — add tool to group
-//   DELETE /api/groups/:name/tools/:tool — remove tool from group
 //
 //   GET    /api/policies              — list Casbin policies
 //   POST   /api/policies              — add a policy
 //   DELETE /api/policies              — remove a policy
 //   POST   /api/policies/reload       — reload from file
+//
+//   GET    /api/roles                 — list role bindings
 //   POST   /api/roles                 — assign role to user
+//   DELETE /api/roles                 — remove a role binding
 // ============================================================
 
 import { Hono } from "hono";
