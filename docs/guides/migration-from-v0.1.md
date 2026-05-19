@@ -151,3 +151,16 @@ Also: `GET /api/servers` currently lists only servers whose tools have been disc
 - **No subdomain routing** in v1 — use a reverse proxy that maps `acme.gateway.example.com` to header `X-Tenant: acme`.
 - **Deferred (backlog):** Postgres row-level security, Casbin domain-RBAC migration, per-plan quota tiers, tenant-scoped OIDC providers, tenant memberships (cross-tenant principal), repo-layer tenant guard enforcement, data export tooling, billing hooks.
 - **Build stability:** all existing repo methods continue to work without modification because every new `tenant_id` column has `DEFAULT 'tnt_default'`. Multi-tenant deployments should add repo-layer scoping in a follow-up before production use.
+
+## P5 (v0.7.0-p5) additions
+
+- **Outbound proxy management** — register named HTTP/HTTPS (and best-effort SOCKS5) proxies via `/api/proxies` or `mcp-gateway proxy add`. Routes upstream MCP and OpenAPI calls through them via `undici.ProxyAgent` dispatchers cached in a `ProxyRegistry`.
+- **Three-level precedence** — server-level `proxyName` overrides group-level (when call comes via `/mcp/groups/:name`), which overrides `proxy.defaultName` global default. Direct connection when none set.
+- **Password redaction** — proxy URLs with inline credentials (`http://user:pass@host`) are redacted to `http://user:***@host` in all GET responses; internal usage retains plaintext for actual proxy auth.
+- **Block-by-default deletion** — `DELETE /api/proxies/:id` returns 409 with a `references` list when the proxy is in use; `?force=true` cascades nullify and returns a `detached` list.
+- **Fail-closed** — proxy unreachable → caller fails with the underlying error (no silent fallback to direct connection).
+- **New CLI:** `mcp-gateway proxy add/list/show/update/delete/attach/detach`.
+- **Tracing:** `proxy.name` + `proxy.scheme` attributes on existing `gateway.session.send` spans.
+- **Metrics:** `mcp_proxy_requests_total{proxy, result}` counter.
+- **New migration:** `7_p5_proxies` — adds `proxies` table and `proxy_name` columns to `servers` and `groups`.
+- **Limitations:** OpenAPI servers receive their dispatcher at registration time; PATCHing `proxyName` later does NOT refresh the cached adapter (re-register the server to pick up new proxies). SOCKS5 routing is best-effort via a `socks-proxy-agent` shim; HTTP/HTTPS proxies are the primary supported path. Plaintext credentials stored in DB (same trust boundary as webhook secrets and bearer tokens).
