@@ -13,6 +13,7 @@ import { ToolDetailSheet } from '@/features/tools/detail-sheet';
 import { GroupsPage } from '@/features/groups/page';
 import { GroupNewSheet } from '@/features/groups/new-sheet';
 import { GroupDetailSheet } from '@/features/groups/detail-sheet';
+import { PoliciesPage } from '@/features/policies/page';
 
 export function App() {
   return (
@@ -43,7 +44,7 @@ export function App() {
               <Route path="/mcp-clients/*" element={<ComingSoon phase="C" title="MCP Clients" />} />
               <Route path="/my-tokens" element={<ComingSoon phase="C" title="My Tokens" />} />
               <Route path="/oidc" element={<ComingSoon phase="C" title="OIDC Providers" />} />
-              <Route path="/policies" element={<ComingSoon phase="B" title="Access Control" />} />
+              <Route path="/policies" element={<PoliciesPage />} />
               {/* RELIABILITY */}
               <Route path="/rate-limit" element={<ComingSoon phase="D" title="Rate Limit" />} />
               <Route path="/quota" element={<ComingSoon phase="D" title="Quota" />} />
