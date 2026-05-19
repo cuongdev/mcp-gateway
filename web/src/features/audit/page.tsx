@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,12 @@ export function AuditPage() {
   const [preset, setPreset] = useState<RangePreset>('24h');
   const [action, setAction] = useState<string>('tool.call');
   const [search, setSearch] = useState('');
-  const since = useMemo(() => Date.now() - PRESETS[preset], [preset]);
+  const [nowMinute, setNowMinute] = useState(() => Math.floor(Date.now() / 60_000));
+  useEffect(() => {
+    const id = setInterval(() => setNowMinute(Math.floor(Date.now() / 60_000)), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const since = useMemo(() => nowMinute * 60_000 - PRESETS[preset], [preset, nowMinute]);
 
   const { data } = useAudit({ since, by, action: action || undefined });
   const rows = (data?.series ?? []).filter((r) =>

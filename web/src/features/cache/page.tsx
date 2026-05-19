@@ -13,11 +13,13 @@ export function CachePage() {
 
   const submit = async () => {
     if (!tool && !principal) return;
-    await invalidate.mutateAsync({
-      tool: tool || undefined,
-      principal: principal || undefined,
-    });
-    setTool(''); setPrincipal('');
+    try {
+      await invalidate.mutateAsync({
+        tool: tool || undefined,
+        principal: principal || undefined,
+      });
+      setTool(''); setPrincipal('');
+    } catch { /* toast handled in hook */ }
   };
 
   return (

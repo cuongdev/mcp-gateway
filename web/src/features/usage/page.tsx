@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -24,7 +24,12 @@ const PRESETS: Record<RangePreset, number> = {
 export function UsagePage() {
   const [by, setBy] = useState<GroupBy>('tool');
   const [preset, setPreset] = useState<RangePreset>('24h');
-  const since = useMemo(() => Date.now() - PRESETS[preset], [preset]);
+  const [nowMinute, setNowMinute] = useState(() => Math.floor(Date.now() / 60_000));
+  useEffect(() => {
+    const id = setInterval(() => setNowMinute(Math.floor(Date.now() / 60_000)), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const since = useMemo(() => nowMinute * 60_000 - PRESETS[preset], [preset, nowMinute]);
 
   const { data } = useUsage({ since, by, action: 'tool.call' });
   const series = data?.series ?? [];
