@@ -47,6 +47,10 @@ const HealthPage = lazy(() => import('@/features/health/page').then((m) => ({ de
 const SettingsPage = lazy(() => import('@/features/settings/page').then((m) => ({ default: m.SettingsPage })));
 const MetricsPage = lazy(() => import('@/features/metrics/page').then((m) => ({ default: m.MetricsPage })));
 
+const TenantsPage = lazy(() => import('@/features/tenants/page').then((m) => ({ default: m.TenantsPage })));
+const TenantNewSheet = lazy(() => import('@/features/tenants/new-sheet').then((m) => ({ default: m.TenantNewSheet })));
+const TenantDetailSheet = lazy(() => import('@/features/tenants/detail-sheet').then((m) => ({ default: m.TenantDetailSheet })));
+
 function RouteSuspenseFallback() {
   return (
     <div className="flex h-full items-center justify-center py-24">
@@ -105,7 +109,10 @@ export function App() {
                 <Route path="/metrics" element={<MetricsPage />} />
                 <Route path="/health" element={<HealthPage />} />
                 {/* SYSTEM */}
-                <Route path="/tenants/*" element={<ComingSoon phase="E" title="Tenants" />} />
+                <Route path="/tenants" element={<TenantsPage />}>
+                  <Route path="new" element={<TenantNewSheet />} />
+                  <Route path=":id" element={<TenantDetailSheet />} />
+                </Route>
                 <Route path="/webhooks" element={<WebhooksPage />}>
                   <Route path="new" element={<WebhookNewSheet />} />
                 </Route>
