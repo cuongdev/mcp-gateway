@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Shield, ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { AuthProvider, AuthMe } from '@/types/api';
+import type { AuthProvider } from '@/types/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -20,18 +21,13 @@ export function LoginPage() {
   });
 
   const enterDevMode = async () => {
-    // In development mode the gateway treats unauthenticated requests as
-    // privileged. We don't need a server-side login — just refetch /auth/me
-    // (which returns null in dev) and let the AuthGate fall through.
-    // Workaround: stuff a sentinel into the cache so AuthGate sees a "user".
-    qc.setQueryData<AuthMe>(queryKeys.authMe, {
-      principalId: 'dev',
-      type: 'user',
-      email: 'dev@local',
-      displayName: 'Developer',
-      roles: ['admin'],
-    });
-    navigate('/overview', { replace: true });
+    try {
+      await api('/auth/dev-login', { method: 'POST', silent401: true });
+      await qc.invalidateQueries({ queryKey: queryKeys.authMe });
+      navigate('/overview', { replace: true });
+    } catch (err) {
+      toast.error(`Dev login failed: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
   };
 
   const errFromUrl = new URLSearchParams(window.location.search).get('auth_error');

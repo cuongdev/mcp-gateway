@@ -334,6 +334,48 @@ export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
     return c.redirect("/dashboard");
   });
 
+  // ── POST /auth/dev-login ───────────────────────────
+  // Issues a session cookie for the in-process "dev" principal.
+  // Only available when running in development mode — returns 404
+  // otherwise to avoid any chance of accidental enabling in prod.
+  app.post("/dev-login", async (c) => {
+    if (config.mode !== "development") {
+      return c.notFound();
+    }
+    if (!sessionSecretBytes) {
+      log.error("dev-login invoked but auth.sessionCookieSecret is unset");
+      return c.json({ error: "session_misconfigured" }, 500);
+    }
+
+    // Upsert a stable dev principal so subsequent calls hit the same row.
+    const principal = await deps.storage.principals.upsertOidcUser({
+      oidcSubject: "dev",
+      oidcProviderId: "dev",
+      email: "dev@local",
+      displayName: "Developer",
+    });
+
+    const sessionCookie = await signSessionCookie(
+      { principalId: principal.id },
+      sessionSecretBytes,
+      cookieTTLSeconds,
+    );
+
+    c.header(
+      "Set-Cookie",
+      `${cookieName}=${sessionCookie}` +
+        `; HttpOnly; Path=/; SameSite=Lax; Max-Age=${cookieTTLSeconds}` +
+        (isProd ? "; Secure" : ""),
+    );
+
+    return c.json({
+      principalId: principal.id,
+      displayName: principal.displayName,
+      email: principal.email ?? null,
+      type: principal.type,
+    });
+  });
+
   // ── GET /auth/me ───────────────────────────────────
   // Returns the principal resolved by sessionCookieMiddleware (or
   // bearerTokenMiddleware). Reads `c.var.principal` directly — no
