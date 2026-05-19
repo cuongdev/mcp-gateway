@@ -23,6 +23,7 @@ import { McpClientDetailSheet } from '@/features/mcp-clients/detail-sheet';
 import { MyTokensPage } from '@/features/my-tokens/page';
 import { MyTokenNewSheet } from '@/features/my-tokens/new-sheet';
 import { PromptsPage } from '@/features/prompts/page';
+import { OidcProvidersPage } from '@/features/oidc/page';
 
 export function App() {
   return (
@@ -60,7 +61,7 @@ export function App() {
               <Route path="/my-tokens" element={<MyTokensPage />}>
                 <Route path="new" element={<MyTokenNewSheet />} />
               </Route>
-              <Route path="/oidc" element={<ComingSoon phase="C" title="OIDC Providers" />} />
+              <Route path="/oidc" element={<OidcProvidersPage />} />
               <Route path="/policies" element={<PoliciesPage />} />
               {/* RELIABILITY */}
               <Route path="/rate-limit" element={<ComingSoon phase="D" title="Rate Limit" />} />
