@@ -16,6 +16,9 @@ import { WebhookRepo } from './repositories/webhook.repo.js';
 import { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
 import { TenantRepo } from './repositories/tenant.repo.js';
 import { ProxyRepo } from './repositories/proxy.repo.js';
+import { ResourceRepo } from './repositories/resource.repo.js';
+import { RootRepo } from './repositories/root.repo.js';
+import { ServerStateRepo } from './repositories/server-state.repo.js';
 import { listMigrations } from './migrations/index.js';
 
 export interface PostgresAdapterOptions {
@@ -49,6 +52,9 @@ export class PostgresAdapter implements StorageAdapter {
   public readonly webhookDeliveries: WebhookDeliveryRepo;
   public readonly tenants: TenantRepo;
   public readonly proxies: ProxyRepo;
+  public readonly resources: ResourceRepo;
+  public readonly roots: RootRepo;
+  public readonly serverStates: ServerStateRepo;
 
   constructor(opts: PostgresAdapterOptions) {
     this.sql = postgres(opts.url, { onnotice: () => undefined });
@@ -71,6 +77,9 @@ export class PostgresAdapter implements StorageAdapter {
     this.webhookDeliveries = new WebhookDeliveryRepo(this.client as never);
     this.tenants    = new TenantRepo(this.client as never);
     this.proxies    = new ProxyRepo(this.client as never);
+    this.resources    = new ResourceRepo(this.client as never);
+    this.roots        = new RootRepo(this.client as never);
+    this.serverStates = new ServerStateRepo(this.client as never);
   }
 
   async init(): Promise<void> {

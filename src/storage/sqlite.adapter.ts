@@ -17,6 +17,9 @@ import { WebhookRepo } from './repositories/webhook.repo.js';
 import { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
 import { TenantRepo } from './repositories/tenant.repo.js';
 import { ProxyRepo } from './repositories/proxy.repo.js';
+import { ResourceRepo } from './repositories/resource.repo.js';
+import { RootRepo } from './repositories/root.repo.js';
+import { ServerStateRepo } from './repositories/server-state.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -40,6 +43,9 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly webhookDeliveries: WebhookDeliveryRepo;
   public readonly tenants: TenantRepo;
   public readonly proxies: ProxyRepo;
+  public readonly resources: ResourceRepo;
+  public readonly roots: RootRepo;
+  public readonly serverStates: ServerStateRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -58,6 +64,9 @@ export class SqliteAdapter implements StorageAdapter {
     this.webhookDeliveries = new WebhookDeliveryRepo(this.client);
     this.tenants = new TenantRepo(this.client);
     this.proxies = new ProxyRepo(this.client);
+    this.resources = new ResourceRepo(this.client);
+    this.roots = new RootRepo(this.client);
+    this.serverStates = new ServerStateRepo(this.client);
   }
 
   async init(): Promise<void> {

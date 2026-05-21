@@ -13,6 +13,9 @@ import type { WebhookRepo } from './repositories/webhook.repo.js';
 import type { WebhookDeliveryRepo } from './repositories/webhook-delivery.repo.js';
 import type { TenantRepo } from './repositories/tenant.repo.js';
 import type { ProxyRepo } from './repositories/proxy.repo.js';
+import type { ResourceRepo } from './repositories/resource.repo.js';
+import type { RootRepo } from './repositories/root.repo.js';
+import type { ServerStateRepo } from './repositories/server-state.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -41,4 +44,7 @@ export interface StorageAdapter {
   webhookDeliveries: WebhookDeliveryRepo;
   tenants: TenantRepo;
   proxies: ProxyRepo;
+  resources: ResourceRepo;
+  roots: RootRepo;
+  serverStates: ServerStateRepo;
 }
