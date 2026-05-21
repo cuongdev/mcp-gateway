@@ -1,0 +1,741 @@
+{
+  "version": "1",
+  "connectors": [
+    {
+      "id": "github",
+      "displayName": "GitHub",
+      "category": "developer-tools",
+      "iconSlug": "github",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"]
+      },
+      "requiredEnv": [
+        { "key": "GITHUB_PERSONAL_ACCESS_TOKEN", "description": "GitHub PAT with repo scope", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "gitlab",
+      "displayName": "GitLab",
+      "category": "developer-tools",
+      "iconSlug": "gitlab",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-gitlab"]
+      },
+      "requiredEnv": [
+        { "key": "GITLAB_PERSONAL_ACCESS_TOKEN", "description": "GitLab PAT with api scope", "secret": true },
+        { "key": "GITLAB_API_URL", "description": "GitLab API base URL (defaults to gitlab.com)", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "bitbucket",
+      "displayName": "Bitbucket",
+      "category": "developer-tools",
+      "iconSlug": "bitbucket",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-bitbucket"]
+      },
+      "requiredEnv": [
+        { "key": "BITBUCKET_USERNAME", "description": "Bitbucket username", "secret": false },
+        { "key": "BITBUCKET_APP_PASSWORD", "description": "Bitbucket app password", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "jira",
+      "displayName": "Jira",
+      "category": "developer-tools",
+      "iconSlug": "jira",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-jira"]
+      },
+      "requiredEnv": [
+        { "key": "JIRA_URL", "description": "Jira instance base URL", "secret": false },
+        { "key": "JIRA_EMAIL", "description": "Atlassian account email", "secret": false },
+        { "key": "JIRA_API_TOKEN", "description": "Atlassian API token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "linear",
+      "displayName": "Linear",
+      "category": "developer-tools",
+      "iconSlug": "linear",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-linear"]
+      },
+      "requiredEnv": [
+        { "key": "LINEAR_API_KEY", "description": "Linear personal API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "sentry",
+      "displayName": "Sentry",
+      "category": "developer-tools",
+      "iconSlug": "sentry",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/sentry",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sentry"]
+      },
+      "requiredEnv": [
+        { "key": "SENTRY_AUTH_TOKEN", "description": "Sentry auth token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "jenkins",
+      "displayName": "Jenkins",
+      "category": "developer-tools",
+      "iconSlug": "jenkins",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-jenkins"]
+      },
+      "requiredEnv": [
+        { "key": "JENKINS_URL", "description": "Jenkins base URL", "secret": false },
+        { "key": "JENKINS_USERNAME", "description": "Jenkins username", "secret": false },
+        { "key": "JENKINS_API_TOKEN", "description": "Jenkins API token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "circleci",
+      "displayName": "CircleCI",
+      "category": "developer-tools",
+      "iconSlug": "circleci",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-circleci"]
+      },
+      "requiredEnv": [
+        { "key": "CIRCLECI_TOKEN", "description": "CircleCI personal API token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "postgres",
+      "displayName": "PostgreSQL",
+      "category": "databases",
+      "iconSlug": "postgresql",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres"]
+      },
+      "requiredEnv": [
+        { "key": "POSTGRES_CONNECTION_STRING", "description": "Postgres connection string (postgresql://...)", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "mysql",
+      "displayName": "MySQL",
+      "category": "databases",
+      "iconSlug": "mysql",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-mysql"]
+      },
+      "requiredEnv": [
+        { "key": "MYSQL_CONNECTION_STRING", "description": "MySQL connection string (mysql://...)", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "sqlite",
+      "displayName": "SQLite",
+      "category": "databases",
+      "iconSlug": "sqlite",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sqlite"]
+      },
+      "requiredEnv": [
+        { "key": "SQLITE_DB_PATH", "description": "Absolute path to the SQLite database file", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "mongodb",
+      "displayName": "MongoDB",
+      "category": "databases",
+      "iconSlug": "mongodb",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-mongodb"]
+      },
+      "requiredEnv": [
+        { "key": "MONGODB_CONNECTION_STRING", "description": "MongoDB connection string (mongodb://...)", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "redis",
+      "displayName": "Redis",
+      "category": "databases",
+      "iconSlug": "redis",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-redis"]
+      },
+      "requiredEnv": [
+        { "key": "REDIS_CONNECTION_STRING", "description": "Redis connection string (redis://...)", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "elasticsearch",
+      "displayName": "Elasticsearch",
+      "category": "databases",
+      "iconSlug": "elasticsearch",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-elasticsearch"]
+      },
+      "requiredEnv": [
+        { "key": "ELASTICSEARCH_URL", "description": "Elasticsearch base URL", "secret": false },
+        { "key": "ELASTICSEARCH_API_KEY", "description": "Elasticsearch API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "clickhouse",
+      "displayName": "ClickHouse",
+      "category": "databases",
+      "iconSlug": "clickhouse",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-clickhouse"]
+      },
+      "requiredEnv": [
+        { "key": "CLICKHOUSE_CONNECTION_STRING", "description": "ClickHouse connection string", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "notion",
+      "displayName": "Notion",
+      "category": "productivity",
+      "iconSlug": "notion",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-notion"]
+      },
+      "requiredEnv": [
+        { "key": "NOTION_API_KEY", "description": "Notion integration secret", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "slack",
+      "displayName": "Slack",
+      "category": "productivity",
+      "iconSlug": "slack",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-slack"]
+      },
+      "requiredEnv": [
+        { "key": "SLACK_BOT_TOKEN", "description": "Slack bot user OAuth token (xoxb-...)", "secret": true },
+        { "key": "SLACK_TEAM_ID", "description": "Slack workspace team ID", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "discord",
+      "displayName": "Discord",
+      "category": "productivity",
+      "iconSlug": "discord",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-discord"]
+      },
+      "requiredEnv": [
+        { "key": "DISCORD_BOT_TOKEN", "description": "Discord bot token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "zoom",
+      "displayName": "Zoom",
+      "category": "productivity",
+      "iconSlug": "zoom",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-zoom"]
+      },
+      "requiredEnv": [
+        { "key": "ZOOM_API_KEY", "description": "Zoom API key", "secret": true },
+        { "key": "ZOOM_API_SECRET", "description": "Zoom API secret", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "todoist",
+      "displayName": "Todoist",
+      "category": "productivity",
+      "iconSlug": "todoist",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-todoist"]
+      },
+      "requiredEnv": [
+        { "key": "TODOIST_API_TOKEN", "description": "Todoist personal API token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "google-calendar",
+      "displayName": "Google Calendar",
+      "category": "productivity",
+      "iconSlug": "google-calendar",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-google-calendar"]
+      },
+      "requiredEnv": [
+        { "key": "GOOGLE_CLIENT_ID", "description": "Google OAuth client ID", "secret": false },
+        { "key": "GOOGLE_CLIENT_SECRET", "description": "Google OAuth client secret", "secret": true },
+        { "key": "GOOGLE_REFRESH_TOKEN", "description": "OAuth refresh token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "gmail",
+      "displayName": "Gmail",
+      "category": "productivity",
+      "iconSlug": "gmail",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-gmail"]
+      },
+      "requiredEnv": [
+        { "key": "GOOGLE_CLIENT_ID", "description": "Google OAuth client ID", "secret": false },
+        { "key": "GOOGLE_CLIENT_SECRET", "description": "Google OAuth client secret", "secret": true },
+        { "key": "GOOGLE_REFRESH_TOKEN", "description": "OAuth refresh token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "aws-s3",
+      "displayName": "AWS S3",
+      "category": "cloud",
+      "iconSlug": "amazons3",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-aws-s3"]
+      },
+      "requiredEnv": [
+        { "key": "AWS_ACCESS_KEY_ID", "description": "AWS access key ID", "secret": true },
+        { "key": "AWS_SECRET_ACCESS_KEY", "description": "AWS secret access key", "secret": true },
+        { "key": "AWS_REGION", "description": "AWS region", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "gcp-storage",
+      "displayName": "Google Cloud Storage",
+      "category": "cloud",
+      "iconSlug": "googlecloud",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-gcp-storage"]
+      },
+      "requiredEnv": [
+        { "key": "GOOGLE_APPLICATION_CREDENTIALS", "description": "Path to service account JSON key", "secret": true },
+        { "key": "GCP_PROJECT_ID", "description": "GCP project ID", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "azure-blob",
+      "displayName": "Azure Blob Storage",
+      "category": "cloud",
+      "iconSlug": "microsoftazure",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-azure-blob"]
+      },
+      "requiredEnv": [
+        { "key": "AZURE_STORAGE_CONNECTION_STRING", "description": "Azure Storage connection string", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "cloudflare-workers",
+      "displayName": "Cloudflare Workers",
+      "category": "cloud",
+      "iconSlug": "cloudflare",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-cloudflare-workers"]
+      },
+      "requiredEnv": [
+        { "key": "CLOUDFLARE_API_TOKEN", "description": "Cloudflare API token", "secret": true },
+        { "key": "CLOUDFLARE_ACCOUNT_ID", "description": "Cloudflare account ID", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "vercel",
+      "displayName": "Vercel",
+      "category": "cloud",
+      "iconSlug": "vercel",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-vercel"]
+      },
+      "requiredEnv": [
+        { "key": "VERCEL_TOKEN", "description": "Vercel access token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "supabase",
+      "displayName": "Supabase",
+      "category": "cloud",
+      "iconSlug": "supabase",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-supabase"]
+      },
+      "requiredEnv": [
+        { "key": "SUPABASE_URL", "description": "Supabase project URL", "secret": false },
+        { "key": "SUPABASE_SERVICE_ROLE_KEY", "description": "Supabase service role key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "huggingface",
+      "displayName": "Hugging Face",
+      "category": "ai-ml",
+      "iconSlug": "huggingface",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-huggingface"]
+      },
+      "requiredEnv": [
+        { "key": "HUGGINGFACE_TOKEN", "description": "Hugging Face access token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "openai",
+      "displayName": "OpenAI",
+      "category": "ai-ml",
+      "iconSlug": "openai",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-openai"]
+      },
+      "requiredEnv": [
+        { "key": "OPENAI_API_KEY", "description": "OpenAI API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": true, "roots": false }
+    },
+    {
+      "id": "anthropic",
+      "displayName": "Anthropic",
+      "category": "ai-ml",
+      "iconSlug": "anthropic",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-anthropic"]
+      },
+      "requiredEnv": [
+        { "key": "ANTHROPIC_API_KEY", "description": "Anthropic API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": true, "roots": false }
+    },
+    {
+      "id": "replicate",
+      "displayName": "Replicate",
+      "category": "ai-ml",
+      "iconSlug": "replicate",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-replicate"]
+      },
+      "requiredEnv": [
+        { "key": "REPLICATE_API_TOKEN", "description": "Replicate API token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "pinecone",
+      "displayName": "Pinecone",
+      "category": "ai-ml",
+      "iconSlug": "pinecone",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-pinecone"]
+      },
+      "requiredEnv": [
+        { "key": "PINECONE_API_KEY", "description": "Pinecone API key", "secret": true },
+        { "key": "PINECONE_ENVIRONMENT", "description": "Pinecone environment", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "weaviate",
+      "displayName": "Weaviate",
+      "category": "ai-ml",
+      "iconSlug": "weaviate",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-weaviate"]
+      },
+      "requiredEnv": [
+        { "key": "WEAVIATE_URL", "description": "Weaviate cluster URL", "secret": false },
+        { "key": "WEAVIATE_API_KEY", "description": "Weaviate API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "sendgrid",
+      "displayName": "SendGrid",
+      "category": "communications",
+      "iconSlug": "sendgrid",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-sendgrid"]
+      },
+      "requiredEnv": [
+        { "key": "SENDGRID_API_KEY", "description": "SendGrid API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "twilio",
+      "displayName": "Twilio",
+      "category": "communications",
+      "iconSlug": "twilio",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-twilio"]
+      },
+      "requiredEnv": [
+        { "key": "TWILIO_ACCOUNT_SID", "description": "Twilio account SID", "secret": true },
+        { "key": "TWILIO_AUTH_TOKEN", "description": "Twilio auth token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "telegram",
+      "displayName": "Telegram",
+      "category": "communications",
+      "iconSlug": "telegram",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-telegram"]
+      },
+      "requiredEnv": [
+        { "key": "TELEGRAM_BOT_TOKEN", "description": "Telegram bot token", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "mailgun",
+      "displayName": "Mailgun",
+      "category": "communications",
+      "iconSlug": "mailgun",
+      "docsUrl": "https://github.com/punkpeye/awesome-mcp-servers",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "mcp-server-mailgun"]
+      },
+      "requiredEnv": [
+        { "key": "MAILGUN_API_KEY", "description": "Mailgun API key", "secret": true },
+        { "key": "MAILGUN_DOMAIN", "description": "Mailgun sending domain", "secret": false }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "filesystem",
+      "displayName": "Filesystem",
+      "category": "local",
+      "iconSlug": "files",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+      },
+      "requiredEnv": [],
+      "requiredArgs": [
+        { "key": "rootPath", "description": "Root directory the server is allowed to read/write", "type": "string" }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": true }
+    },
+    {
+      "id": "git",
+      "displayName": "Git",
+      "category": "local",
+      "iconSlug": "git",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-git"]
+      },
+      "requiredEnv": [],
+      "requiredArgs": [
+        { "key": "repository", "description": "Path to the local git repository", "type": "string" }
+      ],
+      "supports": { "tools": true, "resources": true, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "brave-search",
+      "displayName": "Brave Search",
+      "category": "local",
+      "iconSlug": "brave",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"]
+      },
+      "requiredEnv": [
+        { "key": "BRAVE_API_KEY", "description": "Brave Search API key", "secret": true }
+      ],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    },
+    {
+      "id": "fetch",
+      "displayName": "Fetch",
+      "category": "local",
+      "iconSlug": "globe",
+      "docsUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+      "templateVersion": "1.0.0",
+      "transport": {
+        "kind": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-fetch"]
+      },
+      "requiredEnv": [],
+      "supports": { "tools": true, "resources": false, "prompts": false, "sampling": false, "roots": false }
+    }
+  ]
+}

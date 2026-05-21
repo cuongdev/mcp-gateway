@@ -5,7 +5,8 @@ logs/
 *.log
 .DS_Store
 coverage/
-data/
+data/*
+!data/catalog/
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
