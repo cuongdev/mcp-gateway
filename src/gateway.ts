@@ -28,6 +28,11 @@ import { buildMiddlewarePipeline } from "./middleware/index.js";
 import { ToolRegistry } from "./registry/tool.registry.js";
 import { ToolGroupManager } from "./registry/tool.groups.js";
 import { PromptRegistry } from "./registry/prompt.registry.js";
+import { ResourceRegistry } from "./registry/resource.registry.js";
+import { RootRegistry } from "./registry/root.registry.js";
+import { CapabilityRegistry } from "./capability/registry.js";
+import { InMemoryStateMachine, type StateMachine } from "./health/state-machine.js";
+import { ConnectorRegistry } from "./catalog/connectors.js";
 import { SessionManager } from "./session/session.manager.js";
 import { PolicyEngine } from "./middleware/authz/policy.engine.js";
 import { AuditLogger } from "./middleware/audit/audit.logger.js";
@@ -71,6 +76,11 @@ export class Gateway {
   private toolRegistry: ToolRegistry;
   private toolGroups: ToolGroupManager;
   private promptRegistry: PromptRegistry;
+  private resourceRegistry: ResourceRegistry;
+  private rootRegistry: RootRegistry;
+  private capabilityRegistry: CapabilityRegistry;
+  private stateMachine: StateMachine;
+  private connectorRegistry: ConnectorRegistry;
   private sessionManager: SessionManager;
   private policyEngine: PolicyEngine;
   private auditLogger: AuditLogger;
@@ -92,6 +102,13 @@ export class Gateway {
     this.toolRegistry = new ToolRegistry(storage);
     this.toolGroups = new ToolGroupManager(storage, this.toolRegistry);
     this.promptRegistry = new PromptRegistry(storage);
+    this.resourceRegistry = new ResourceRegistry(storage);
+    this.rootRegistry = new RootRegistry(storage);
+    this.capabilityRegistry = new CapabilityRegistry(
+      this.toolRegistry, this.promptRegistry, this.resourceRegistry, this.rootRegistry,
+    );
+    this.stateMachine = new InMemoryStateMachine();
+    this.connectorRegistry = new ConnectorRegistry();
     this.sessionManager = new SessionManager();
     this.policyEngine = new PolicyEngine({
       storage,
@@ -264,6 +281,9 @@ export class Gateway {
     await this.toolRegistry.load();
     await this.toolGroups.load();
     await this.promptRegistry.load();
+    await this.resourceRegistry.load();
+    await this.rootRegistry.load();
+    this.connectorRegistry.loadBuiltin();
     await this.sessionManager.loadFromStorage(this.storage);
     await this.policyEngine.load();
 
@@ -481,6 +501,11 @@ export class Gateway {
   getToolRegistry() { return this.toolRegistry; }
   getToolGroups() { return this.toolGroups; }
   getPromptRegistry() { return this.promptRegistry; }
+  getResourceRegistry() { return this.resourceRegistry; }
+  getRootRegistry() { return this.rootRegistry; }
+  getCapabilityRegistry() { return this.capabilityRegistry; }
+  getStateMachine() { return this.stateMachine; }
+  getConnectorRegistry() { return this.connectorRegistry; }
   getSessionManager() { return this.sessionManager; }
   getPolicyEngine() { return this.policyEngine; }
   getAuditLogger() { return this.auditLogger; }
