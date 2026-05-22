@@ -182,3 +182,25 @@ export class ConfigurationError extends GatewayError {
     this.name = "ConfigurationError";
   }
 }
+
+// ── Connector Catalog Errors (P9) ──────────────────────────
+
+export class ConnectorNotFoundError extends GatewayError {
+  constructor(connectorId: string) {
+    super(`Connector '${connectorId}' not found in catalog`, "connector_not_found", 404, {
+      connectorId,
+    });
+    this.name = "ConnectorNotFoundError";
+  }
+}
+
+export class InvalidEnvError extends GatewayError {
+  constructor(key: string, reason: "missing" | "pattern_mismatch", details?: Record<string, unknown>) {
+    const message =
+      reason === "missing"
+        ? `Required environment variable '${key}' is missing`
+        : `Environment variable '${key}' does not match required pattern`;
+    super(message, "invalid_env", 400, { key, reason, ...details });
+    this.name = "InvalidEnvError";
+  }
+}
