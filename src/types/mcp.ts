@@ -55,10 +55,14 @@ export const MCP_METHODS = {
   RESOURCES_READ: "resources/read",
   RESOURCES_SUBSCRIBE: "resources/subscribe",
   RESOURCES_UNSUBSCRIBE: "resources/unsubscribe",
+  RESOURCES_TEMPLATES_LIST: "resources/templates/list",
 
   // Prompts
   PROMPTS_LIST: "prompts/list",
   PROMPTS_GET: "prompts/get",
+
+  // Roots (reverse channel — gateway exposes admin view only in v1)
+  ROOTS_LIST: "roots/list",
 
   // Logging
   LOG_SET_LEVEL: "logging/setLevel",
