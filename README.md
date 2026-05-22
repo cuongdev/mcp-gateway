@@ -158,6 +158,63 @@ g, analyst, user
 g, alice@example.com, admin
 ```
 
+## What's New in v0.8.0 — Pipeline Platform
+
+Five user-visible features built on a unified foundation, shipped as one release:
+
+### Foundation (internal)
+- **Capability layer** — unified `CapabilityRegistry` façade over Tool / Prompt / Resource / Root registries.
+- **Server state machine** — per-server health tracking with `healthy → degraded → circuit_open → half_open → healthy` transitions, persisted to `server_state` table.
+- **Probe loop** — background heartbeat that probes degraded servers via `tools/list` and recovers them automatically.
+- **Connector template registry** — 42 seeded MCP-server templates shipped in `data/catalog/connectors.json`.
+
+### P6 — Circuit Breaker
+- `SessionManager.send()` consults the state machine before every upstream call, rejecting with `circuit_open` when tripped.
+- New `mcp_circuit_state`, `mcp_circuit_trips_total`, `mcp_circuit_rejections_total` Prometheus metrics; `server.state.changed` webhook event.
+- `/api/circuits` admin routes (GET list, trip/close/reset, PATCH config); `mcp-gateway circuit` CLI; `/circuits` dashboard with sparkline + manual controls.
+
+### P7 — PII / Secret Redaction
+- 22+ built-in regex rules (AWS, GitHub, GitLab, Anthropic, OpenAI, Stripe, JWT, PEM keys, SSH keys, email, phone, SSN, credit-card Luhn-checked, db URLs with creds, etc.).
+- `RedactionEngine` runs on `tools/call` request `arguments` and response `content`; modes: `redact | block | warn`.
+- Custom per-tenant rules; built-in rules can have their mode changed but not their pattern.
+- `safe-regex` validator on every rule; ReDoS-prone patterns are rejected with a warning.
+- Findings recorded WITHOUT the matched text (only rule_id + count + offset).
+- `/api/redaction` admin routes; `mcp-gateway redaction` CLI; `/redaction` dashboard with Rules + Findings + Test playground tabs.
+
+### P8 — Full MCP Spec Coverage
+- `resources/list`, `resources/read`, `resources/templates/list`, `resources/subscribe`, `resources/unsubscribe`.
+- `completion/complete`, `logging/setLevel` (broadcasts to all upstreams).
+- `roots/list` returns gateway-managed admin view (reverse-channel deferred to v0.9).
+- `/api/resources` admin routes; `/resources` browser with mime-aware viewer (text via pre, image via `<img>`, binary download).
+
+### P9 — Connector Catalog
+- 42 seed templates across developer-tools / databases / productivity / cloud / ai-ml / communications / local.
+- `CatalogInstaller` atomically installs a server with env validation, auto-discovery, and rollback on failure.
+- `catalog_installs` table tracks template version → compares to current `connectors.json` for `update_available` flag.
+- `/api/catalog/{connectors,install,installs}` admin routes; `mcp-gateway catalog list/show/install/uninstall` CLI; `/catalog` dashboard with Browse + Installed tabs + 3-step install wizard (configure → preview → result).
+
+### P10 — Tool Composition / Virtual Tools
+- Declarative DAG plan format with strict AJV validation: ≤50 steps, ≤16 KB JSON, whitelist template grammar (`{{input.X}}`, `{{steps.id.path}}`, `{{env.KEY}}`).
+- `VirtualToolExecutor` runs steps sequentially or in parallel groups; `fail_fast` or `best_effort` error policy.
+- Each step routes through the full pipeline so circuit breaker + redaction apply uniformly.
+- Virtual tools appear in `tools/list` with `_virtual: true` marker.
+- `/api/virtual-tools` admin routes (CRUD + validate + test); `mcp-gateway virtual-tool` CLI; `/virtual-tools` dashboard with list + JSON plan editor + dry-run test panel.
+
+### Storage
+- Two new migrations: `0008_p6_foundation` (server_state, resources, resource_templates, roots) + `0009_p6_features` (redaction_rules, redaction_findings, sampling_log, catalog_installs, virtual_tools).
+- Backwards-compatible — no existing column changes, no API breakage.
+
+### Frontend
+- 6 new pages: `/circuits`, `/redaction`, `/catalog`, `/resources`, `/virtual-tools`, `/virtual-tools/:name`.
+- Sidebar reorganised: "Servers & Tools" group (Catalog, Servers, Tools, Virtual Tools, Resources, Prompts, Proxies) + new "Security" group (Redaction).
+- 6 Playwright smokes added.
+
+### Limitations
+- Reverse channel (`sampling/createMessage`, `roots/list` fanout to client) deferred. Gateway logs sampling requests but does not yet route them back to MCP clients.
+- Virtual tool editor is JSON-based; visual react-flow editor deferred to v0.9.
+- Catalog `enableCircuitBreaker` / `applyRedaction` options accepted but currently no-ops (defaults are global).
+- Update detection on catalog installs is read-only; `POST /api/catalog/installs/:id/update` returns 501.
+
 ## What's New in v0.7.0-p5
 
 - **Outbound proxy management** — register named HTTP/HTTPS (and best-effort SOCKS5) proxies via `/api/proxies` or `mcp-gateway proxy add`. Routes upstream MCP and OpenAPI calls through them via `undici.ProxyAgent` dispatchers cached in a `ProxyRegistry`.
