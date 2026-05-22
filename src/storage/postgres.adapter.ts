@@ -22,6 +22,7 @@ import { ServerStateRepo } from './repositories/server-state.repo.js';
 import { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
 import { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
 import { CatalogInstallRepo } from './repositories/catalog-install.repo.js';
+import { VirtualToolRepo } from './repositories/virtual-tool.repo.js';
 import { listMigrations } from './migrations/index.js';
 
 export interface PostgresAdapterOptions {
@@ -61,6 +62,7 @@ export class PostgresAdapter implements StorageAdapter {
   public readonly redactionRules: RedactionRuleRepo;
   public readonly redactionFindings: RedactionFindingRepo;
   public readonly catalogInstalls: CatalogInstallRepo;
+  public readonly virtualTools: VirtualToolRepo;
 
   constructor(opts: PostgresAdapterOptions) {
     this.sql = postgres(opts.url, { onnotice: () => undefined });
@@ -89,6 +91,7 @@ export class PostgresAdapter implements StorageAdapter {
     this.redactionRules = new RedactionRuleRepo(this.client as never);
     this.redactionFindings = new RedactionFindingRepo(this.client as never);
     this.catalogInstalls = new CatalogInstallRepo(this.client as never);
+    this.virtualTools = new VirtualToolRepo(this.client as never);
   }
 
   async init(): Promise<void> {
