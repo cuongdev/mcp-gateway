@@ -12,7 +12,7 @@
 // ============================================================
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import type { Dispatcher } from "undici";
 import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
 import {
@@ -27,6 +27,7 @@ import type { OpenApiAdapter } from "../adapters/openapi/adapter.js";
 import type { DiscoveredOpenApiTool } from "../adapters/openapi/operation-to-tool.js";
 import type { ProxyRegistry } from "../proxy/registry.js";
 import { resolveProxyName } from "../proxy/resolver.js";
+import type { ReverseChannelMux } from "../pipeline/reverse-channel.js";
 import { withSpan, currentTraceparent } from "../observability/spans.js";
 import {
   upstreamLatency,
@@ -103,6 +104,25 @@ interface StdioSession {
 
 type Session = HttpSession | StdioSession;
 
+/** Shape of an upstream-initiated JSON-RPC REQUEST we'd forward via the mux. */
+interface ReverseRequestShape {
+  jsonrpc: '2.0';
+  id: string | number;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+/** Method names that the reverse channel will forward back to the client. */
+const REVERSE_FORWARDABLE_METHODS = new Set<string>([
+  'sampling/createMessage',
+  'roots/list',
+]);
+
+/** Short SHA-256 hash (first 16 hex chars) — duplicated from mcp.routes for sampling-log hashes. */
+function hashShort(s: string): string {
+  return createHash('sha256').update(s).digest('hex').slice(0, 16);
+}
+
 // ── Prompt helpers ────────────────────────────────────
 
 /**
@@ -166,6 +186,30 @@ export class SessionManager {
    */
   private stateMachine?: StateMachine;
 
+  /**
+   * Optional reverse-channel mux (v0.9 P8). When set, STDIO upstream
+   * stdout chunks that look like JSON-RPC REQUESTS (i.e. they carry a
+   * `method` field rather than `result`/`error`) are forwarded through
+   * the mux to the client identified by `_meta.session_id`.
+   */
+  private reverseChannel?: ReverseChannelMux;
+
+  /**
+   * Optional sampling-log recorder (v0.9). When set, every successful
+   * mux round-trip is recorded with `outcome: 'success'`. We accept a
+   * thin function shape rather than the full repo so tests can stub it.
+   */
+  private samplingRecord?: (input: {
+    requestId: string;
+    upstreamServer: string;
+    clientSessionId: string;
+    method: string;
+    requestPayloadHash: string;
+    responsePayloadHash?: string | null;
+    latencyMs?: number | null;
+    outcome: 'success' | 'client_refused' | 'timeout' | 'error' | 'method_not_supported';
+  }) => Promise<void>;
+
   constructor(opts: SessionManagerOptions = {}) {
     const timeoutMs = (opts.idleTimeoutSec ?? 600) * 1000;
     if (timeoutMs > 0) {
@@ -218,6 +262,142 @@ export class SessionManager {
    */
   setStateMachine(sm: StateMachine | undefined): void {
     this.stateMachine = sm;
+  }
+
+  /**
+   * Wire the reverse-channel mux (v0.9 P8). STDIO upstream-initiated
+   * JSON-RPC REQUESTS are routed through this mux back to the client
+   * that owns `_meta.session_id`. HTTP upstreams require an explicit
+   * server→gateway push channel which is out of scope for v0.9.
+   */
+  setReverseChannel(mux: ReverseChannelMux | undefined): void {
+    this.reverseChannel = mux;
+  }
+
+  /**
+   * Wire a sampling-log recorder (v0.9). Optional — when unset, mux
+   * round-trips are not persisted (but still routed correctly).
+   */
+  setSamplingRecorder(
+    fn: SessionManager['samplingRecord'] | undefined,
+  ): void {
+    this.samplingRecord = fn;
+  }
+
+  /**
+   * v0.9 reverse-channel inbound from an STDIO upstream. Forwards the
+   * JSON-RPC request to the originating client (identified via
+   * `params._meta.session_id` injected by `send()`) and writes the
+   * client's response back to the upstream's stdin so the upstream's
+   * own request promise can resolve.
+   *
+   * Failures are reported back to the upstream as a JSON-RPC error
+   * response so the upstream isn't left waiting forever.
+   *
+   * TODO(v0.10): apply RedactRequest + RedactResponse interceptors on
+   * BOTH legs of the reverse call (currently no redaction is applied).
+   */
+  private async handleUpstreamReverseRequest(
+    serverName: string,
+    session: StdioSession,
+    msg: ReverseRequestShape,
+  ): Promise<void> {
+    const mux = this.reverseChannel;
+    const requestId = String(msg.id);
+
+    // Only forward known methods.
+    if (!REVERSE_FORWARDABLE_METHODS.has(msg.method)) {
+      log.warn({ server: serverName, method: msg.method }, 'unknown upstream reverse method');
+      this.writeStdioResponse(session, {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32601, message: `Method not found: ${msg.method}` },
+      });
+      return;
+    }
+
+    if (!mux) {
+      log.warn({ server: serverName, method: msg.method }, 'reverse channel not wired; rejecting');
+      this.writeStdioResponse(session, {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32603, message: 'reverse channel not available' },
+      });
+      return;
+    }
+
+    // Pull the originating client session id from _meta.
+    const params = msg.params ?? {};
+    const meta = (params._meta as { session_id?: unknown } | undefined);
+    const sessionId = typeof meta?.session_id === 'string' ? meta.session_id : null;
+    if (!sessionId) {
+      log.warn({ server: serverName, method: msg.method }, 'reverse rpc missing _meta.session_id; rejecting');
+      this.writeStdioResponse(session, {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32602, message: 'missing _meta.session_id' },
+      });
+      await this.samplingRecord?.({
+        requestId,
+        upstreamServer: serverName,
+        clientSessionId: 'unknown',
+        method: msg.method,
+        requestPayloadHash: hashShort(JSON.stringify(msg)),
+        outcome: 'error',
+      }).catch(() => undefined);
+      return;
+    }
+
+    const started = Date.now();
+    try {
+      const response = await mux.forwardFromUpstream(serverName, sessionId, msg);
+      // Relay the client's response (which IS a JsonRpcResponse) verbatim
+      // back to the upstream over stdin so its `id`-matched promise resolves.
+      this.writeStdioResponse(session, response as JsonRpcResponse);
+      await this.samplingRecord?.({
+        requestId,
+        upstreamServer: serverName,
+        clientSessionId: sessionId,
+        method: msg.method,
+        requestPayloadHash: hashShort(JSON.stringify(msg)),
+        responsePayloadHash: hashShort(JSON.stringify(response)),
+        latencyMs: Date.now() - started,
+        outcome: 'success',
+      }).catch(() => undefined);
+    } catch (err) {
+      const name = err instanceof Error ? err.name : 'Error';
+      const outcome: 'timeout' | 'client_refused' | 'error' =
+        name === 'ReverseChannelTimeoutError' ? 'timeout'
+          : name === 'ClientNotConnectedError' ? 'client_refused'
+          : 'error';
+      this.writeStdioResponse(session, {
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: {
+          code: -32603,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      });
+      await this.samplingRecord?.({
+        requestId,
+        upstreamServer: serverName,
+        clientSessionId: sessionId,
+        method: msg.method,
+        requestPayloadHash: hashShort(JSON.stringify(msg)),
+        latencyMs: Date.now() - started,
+        outcome,
+      }).catch(() => undefined);
+    }
+  }
+
+  /** Write a JSON-RPC response line back to a stdio upstream. */
+  private writeStdioResponse(session: StdioSession, response: JsonRpcResponse): void {
+    if (!session.process?.stdin || session.process.killed) return;
+    try {
+      session.process.stdin.write(JSON.stringify(response) + '\n');
+    } catch (err) {
+      log.warn({ err }, 'failed to write reverse-channel response to stdio');
+    }
   }
 
   /**
@@ -495,10 +675,20 @@ export class SessionManager {
    * Send a JSON-RPC request to an upstream server.
    * Handles transport differences transparently.
    *
-   * @param opts.timeoutMs        — per-call timeout override (ms)
-   * @param opts.groupProxyName   — group's proxyName (when call arrived via
-   *                                `/mcp/groups/:name`). Server-level proxy
-   *                                still wins per resolveProxyName().
+   * @param opts.timeoutMs              — per-call timeout override (ms)
+   * @param opts.groupProxyName         — group's proxyName (when call arrived via
+   *                                      `/mcp/groups/:name`). Server-level proxy
+   *                                      still wins per resolveProxyName().
+   * @param opts.originatingSessionId   — v0.9 reverse-channel binding. When set,
+   *                                      we inject `_meta.session_id` into the
+   *                                      outbound `params` so that any
+   *                                      upstream-initiated reverse RPC
+   *                                      (sampling/createMessage, roots/list,
+   *                                      resources/updated) carries the
+   *                                      session-id and the gateway's mux can
+   *                                      route the reverse request back to the
+   *                                      right client. An already-present
+   *                                      `_meta` field is left untouched.
    *
    * For backwards compatibility, the 3rd argument may still be a bare
    * `number` (treated as `timeoutMs`).
@@ -506,10 +696,31 @@ export class SessionManager {
   async send(
     serverName: string,
     request: JsonRpcRequest,
-    opts?: number | { timeoutMs?: number; groupProxyName?: string | null },
+    opts?: number | { timeoutMs?: number; groupProxyName?: string | null; originatingSessionId?: string },
   ): Promise<JsonRpcResponse> {
-    const normalized: { timeoutMs?: number; groupProxyName?: string | null } =
+    const normalized: { timeoutMs?: number; groupProxyName?: string | null; originatingSessionId?: string } =
       typeof opts === "number" ? { timeoutMs: opts } : (opts ?? {});
+
+    // Inject `_meta.session_id` so upstream reverse RPCs carry it back.
+    // Only injected when caller supplied an `originatingSessionId` and the
+    // request doesn't already specify `_meta` (don't clobber explicit meta).
+    if (normalized.originatingSessionId) {
+      const params = request.params;
+      if (params && typeof params === 'object' && !Array.isArray(params)) {
+        const paramsObj = params as Record<string, unknown>;
+        if (paramsObj._meta === undefined) {
+          request = {
+            ...request,
+            params: { ...paramsObj, _meta: { session_id: normalized.originatingSessionId } },
+          };
+        }
+      } else if (params === undefined) {
+        request = {
+          ...request,
+          params: { _meta: { session_id: normalized.originatingSessionId } },
+        };
+      }
+    }
 
     // ── P6 circuit-breaker guard ──────────────────────
     // If a state machine is wired, consult it BEFORE dispatching. If it
@@ -943,7 +1154,9 @@ export class SessionManager {
     session.buffer = "";
     session.initialized = false;
 
-    // Handle stdout — parse JSON-RPC responses
+    // Handle stdout — parse JSON-RPC responses, and (v0.9) detect
+    // upstream-initiated JSON-RPC REQUESTS routed through the reverse
+    // channel mux.
     proc.stdout!.on("data", (chunk: Buffer) => {
       session.buffer += chunk.toString();
 
@@ -956,15 +1169,34 @@ export class SessionManager {
         if (!trimmed) continue;
 
         try {
-          const msg = JSON.parse(trimmed) as JsonRpcResponse;
+          const msg = JSON.parse(trimmed) as Record<string, unknown>;
 
-          if ("id" in msg && msg.id != null) {
-            const pending = session.pending.get(msg.id);
+          // ── JSON-RPC RESPONSE — matches a pending request id ──
+          if ("id" in msg && msg.id != null && !("method" in msg)) {
+            const pending = session.pending.get(msg.id as string | number);
             if (pending) {
               clearTimeout(pending.timer);
-              session.pending.delete(msg.id);
-              pending.resolve(msg);
+              session.pending.delete(msg.id as string | number);
+              pending.resolve(msg as unknown as JsonRpcResponse);
+              continue;
             }
+          }
+
+          // ── JSON-RPC REQUEST initiated by the upstream ──
+          // Has `method` field. v0.9 routes `sampling/createMessage`
+          // and `roots/list` back to the originating client through
+          // the reverse-channel mux. Other method-style RPCs are
+          // logged + ignored (no defined gateway behaviour yet).
+          if (typeof msg.method === 'string' && 'id' in msg && msg.id != null) {
+            this.handleUpstreamReverseRequest(serverName, session, msg as unknown as ReverseRequestShape)
+              .catch((err) => log.warn({ err, serverName }, 'reverse-channel handling failed'));
+            continue;
+          }
+
+          // ── Notification (method but no id) ── just log.
+          if (typeof msg.method === 'string') {
+            log.debug({ server: serverName, method: msg.method }, 'upstream notification (ignored in v0.9)');
+            continue;
           }
         } catch {
           log.debug({ server: serverName, line: trimmed }, "Non-JSON output from STDIO");

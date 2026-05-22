@@ -284,9 +284,22 @@ async function handleMCPRequest(
   const groupProxyName: string | null = groupName
     ? (groups.get(groupName)?.proxyName ?? null)
     : null;
-  const sendOpts: { groupProxyName?: string | null } | undefined = groupProxyName
-    ? { groupProxyName }
-    : undefined;
+  // v0.9 — bind the originating client session id onto every outbound
+  // upstream call. The session manager injects this as `_meta.session_id`
+  // so any reverse RPC the upstream initiates (sampling/createMessage,
+  // roots/list, resources/updated) carries the session id back and the
+  // ReverseChannelMux can fan it to the right client.
+  const originatingSessionId =
+    typeof context?.requestId === 'string' ? context.requestId : undefined;
+  const sendOpts:
+    | { groupProxyName?: string | null; originatingSessionId?: string }
+    | undefined =
+    groupProxyName || originatingSessionId
+      ? {
+          ...(groupProxyName ? { groupProxyName } : {}),
+          ...(originatingSessionId ? { originatingSessionId } : {}),
+        }
+      : undefined;
 
   switch (method) {
     // ── Lifecycle ────────────────────────────────────

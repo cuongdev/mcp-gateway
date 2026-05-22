@@ -71,6 +71,7 @@ import { bootstrapFromConfig } from "./storage/bootstrap.js";
 import { RedactionEngineFactory } from "./redaction/factory.js";
 import { seedAllTenants } from "./redaction/seed.js";
 import { ReverseChannelMux } from "./pipeline/reverse-channel.js";
+import { newId } from "./utils/uuid.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -131,10 +132,30 @@ export class Gateway {
     // circuit breaker and records the outcome (P6).
     this.sessionManager.setStateMachine(this.stateMachine);
     // v0.9 — Reverse-channel mux for upstream-initiated reverse JSON-RPC
-    // (sampling/createMessage, roots/list). Used by the SSE GET /mcp
-    // route to register client channels. Session-binding wiring lives
-    // in the next commit.
+    // (sampling/createMessage, roots/list). Wired into both the SSE GET /mcp
+    // route AND the STDIO inbound parser inside SessionManager so an
+    // upstream's reverse request lands on the originating client.
     this.reverseChannel = new ReverseChannelMux();
+    this.sessionManager.setReverseChannel(this.reverseChannel);
+    // Persist successful mux round-trips to sampling_log for admin audit.
+    this.sessionManager.setSamplingRecorder(async (input) => {
+      try {
+        await this.storage.samplingLog.record({
+          id: `sl_${newId().slice(4)}`,
+          requestId: input.requestId,
+          upstreamServer: input.upstreamServer,
+          clientSessionId: input.clientSessionId,
+          principalId: null,
+          method: input.method,
+          requestPayloadHash: input.requestPayloadHash,
+          responsePayloadHash: input.responsePayloadHash ?? null,
+          latencyMs: input.latencyMs ?? null,
+          outcome: input.outcome,
+        });
+      } catch {
+        /* never throw from recorder */
+      }
+    });
     // P10 — Virtual tool executor. Cheap to construct; reuses session manager.
     this.virtualToolExecutor = new VirtualToolExecutor(
       this.capabilityRegistry, this.sessionManager,
