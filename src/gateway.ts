@@ -235,6 +235,7 @@ export class Gateway {
       connectorRegistry: this.connectorRegistry,
       catalogInstaller: this.catalogInstaller,
       resourceRegistry: this.resourceRegistry,
+      virtualToolExecutor: this.virtualToolExecutor,
     });
     this.app.route(apiPath, adminRoutes);
 

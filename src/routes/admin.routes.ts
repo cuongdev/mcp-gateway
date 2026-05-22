@@ -61,6 +61,7 @@ import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
 import { createRedactionRoutes } from "./admin/redaction.routes.js";
 import { createResourcesRoutes } from "./admin/resources.routes.js";
 import { createCatalogRoutes } from "./admin/catalog.routes.js";
+import { createVirtualToolsRoutes } from "./admin/virtual-tools.routes.js";
 import type { ToolCache } from "../cache/interface.js";
 import type { ProxyRegistry } from "../proxy/registry.js";
 import type { RedactionEngineFactory } from "../redaction/factory.js";
@@ -95,6 +96,8 @@ interface AdminRouteDeps {
   catalogInstaller?: CatalogInstaller;
   /** Resource registry (P8). When present, /api/resources routes are mounted. */
   resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry;
+  /** Virtual tool executor (P10). When present, /api/virtual-tools routes are mounted. */
+  virtualToolExecutor?: import('../virtual-tools/executor.js').VirtualToolExecutor;
 }
 
 /**
@@ -739,6 +742,13 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       registry: deps.connectorRegistry,
       installer: deps.catalogInstaller,
       storage,
+    }));
+  }
+
+  if (deps.virtualToolExecutor) {
+    app.route("/virtual-tools", createVirtualToolsRoutes({
+      repo: storage.virtualTools,
+      executor: deps.virtualToolExecutor,
     }));
   }
 
