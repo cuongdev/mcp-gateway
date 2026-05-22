@@ -39,6 +39,7 @@ import {
   circuitTripsTotal,
 } from "./middleware/monitoring/metrics.middleware.js";
 import { ConnectorRegistry } from "./catalog/connectors.js";
+import { CatalogInstaller } from "./catalog/installer.js";
 import { SessionManager } from "./session/session.manager.js";
 import { PolicyEngine } from "./middleware/authz/policy.engine.js";
 import { AuditLogger } from "./middleware/audit/audit.logger.js";
@@ -66,6 +67,8 @@ import { createTenantsRoutes } from "./routes/admin/tenants.routes.js";
 import { createProxiesRoutes } from "./routes/admin/proxies.routes.js";
 import { ProxyRegistry } from "./proxy/registry.js";
 import { bootstrapFromConfig } from "./storage/bootstrap.js";
+import { RedactionEngineFactory } from "./redaction/factory.js";
+import { seedAllTenants } from "./redaction/seed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,6 +101,8 @@ export class Gateway {
   private approvalSweepInterval?: ReturnType<typeof setInterval>;
   private webhookDispatcher?: WebhookDispatcher;
   private proxyRegistry?: ProxyRegistry;
+  private redactionFactory?: RedactionEngineFactory;
+  private catalogInstaller?: CatalogInstaller;
   private probeLoop?: ProbeLoop;
   private transitionUnsubscribe?: () => void;
 
@@ -165,12 +170,17 @@ export class Gateway {
   private setupRoutes() {
     const { mcpPath, apiPath } = this.config.gateway;
 
+    // Redaction factory wired up-front so both MCP and admin routes can use it.
+    this.redactionFactory = new RedactionEngineFactory(this.storage);
+
     // ── MCP Routes (for AI agents / MCP clients) ─────
     const mcpRoutes = createMCPRoutes({
       toolRegistry: this.toolRegistry,
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
       promptRegistry: this.promptRegistry,
+      redactionFactory: this.redactionFactory,
+      storage: this.storage,
     });
     this.app.route(mcpPath, mcpRoutes);
 
@@ -187,6 +197,20 @@ export class Gateway {
 
     // ── Admin REST API (for developers) ──────────────
     // Cache-dependent admin routes are mounted in start() after async cache init.
+    // Wire catalog installer before admin routes so /api/catalog can mount.
+    // Note: the registry is hydrated in start() via loadBuiltin(); the
+    // installer references the same instance and sees rows lazily.
+    this.catalogInstaller = new CatalogInstaller(
+      this.connectorRegistry,
+      this.storage,
+      this.sessionManager,
+      this.toolRegistry,
+      // webhookDispatcher is initialized later in start() — pass undefined here.
+      // Re-wiring is not required since emit() reads from the dispatcher via
+      // closure at call-time and the installer is reconstructed if needed.
+      undefined,
+    );
+
     const adminRoutes = createAdminRoutes({
       config: this.config,
       storage: this.storage,
@@ -198,6 +222,9 @@ export class Gateway {
       // Late-bound: proxyRegistry is initialized in start(), well after
       // admin routes are mounted in the constructor.
       proxyRegistry: () => this.proxyRegistry,
+      redactionFactory: this.redactionFactory,
+      connectorRegistry: this.connectorRegistry,
+      catalogInstaller: this.catalogInstaller,
     });
     this.app.route(apiPath, adminRoutes);
 
@@ -312,6 +339,9 @@ export class Gateway {
       await this.toolRegistry.load();
       await this.toolGroups.load();
     }
+
+    // Seed built-in redaction rules per tenant (idempotent — no-op if seeded).
+    await seedAllTenants(this.storage);
 
     // Proxy registry — hydrate before admin routes so /api/proxies sees a ready instance.
     this.proxyRegistry = new ProxyRegistry(this.storage);
@@ -621,4 +651,5 @@ export class Gateway {
   getPolicyEngine() { return this.policyEngine; }
   getAuditLogger() { return this.auditLogger; }
   getStorage() { return this.storage; }
+  getRedactionFactory() { return this.redactionFactory; }
 }

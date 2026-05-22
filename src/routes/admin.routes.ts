@@ -58,8 +58,13 @@ import { createUsageRoutes } from "./admin/usage.routes.js";
 import { createAuditRoutes } from "./admin/audit.routes.js";
 import { createCacheRoutes } from "./admin/cache.routes.js";
 import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
+import { createRedactionRoutes } from "./admin/redaction.routes.js";
+import { createCatalogRoutes } from "./admin/catalog.routes.js";
 import type { ToolCache } from "../cache/interface.js";
 import type { ProxyRegistry } from "../proxy/registry.js";
+import type { RedactionEngineFactory } from "../redaction/factory.js";
+import type { ConnectorRegistry } from "../catalog/connectors.js";
+import type { CatalogInstaller } from "../catalog/installer.js";
 
 const log = logger.child({ component: "admin-api" });
 
@@ -82,6 +87,11 @@ interface AdminRouteDeps {
    * (admin routes are constructed before ProxyRegistry is initialized).
    */
   proxyRegistry?: ProxyRegistry | (() => ProxyRegistry | undefined);
+  /** Redaction engine factory (P7). When present, /api/redaction routes are mounted. */
+  redactionFactory?: RedactionEngineFactory;
+  /** Connector catalog (P9). When both are present, /api/catalog routes are mounted. */
+  connectorRegistry?: ConnectorRegistry;
+  catalogInstaller?: CatalogInstaller;
 }
 
 /**
@@ -705,6 +715,21 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   if (deps.cache) {
     app.route("/cache", createCacheRoutes({ cache: deps.cache }));
+  }
+
+  if (deps.redactionFactory) {
+    app.route("/redaction", createRedactionRoutes({
+      storage,
+      engineFactory: deps.redactionFactory,
+    }));
+  }
+
+  if (deps.connectorRegistry && deps.catalogInstaller) {
+    app.route("/catalog", createCatalogRoutes({
+      registry: deps.connectorRegistry,
+      installer: deps.catalogInstaller,
+      storage,
+    }));
   }
 
   return app;
