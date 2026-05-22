@@ -18,6 +18,7 @@ import type { RootRepo } from './repositories/root.repo.js';
 import type { ServerStateRepo } from './repositories/server-state.repo.js';
 import type { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
 import type { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
+import type { CatalogInstallRepo } from './repositories/catalog-install.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -51,4 +52,5 @@ export interface StorageAdapter {
   serverStates: ServerStateRepo;
   redactionRules: RedactionRuleRepo;
   redactionFindings: RedactionFindingRepo;
+  catalogInstalls: CatalogInstallRepo;
 }

@@ -22,6 +22,7 @@ import { RootRepo } from './repositories/root.repo.js';
 import { ServerStateRepo } from './repositories/server-state.repo.js';
 import { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
 import { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
+import { CatalogInstallRepo } from './repositories/catalog-install.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -50,6 +51,7 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly serverStates: ServerStateRepo;
   public readonly redactionRules: RedactionRuleRepo;
   public readonly redactionFindings: RedactionFindingRepo;
+  public readonly catalogInstalls: CatalogInstallRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -73,6 +75,7 @@ export class SqliteAdapter implements StorageAdapter {
     this.serverStates = new ServerStateRepo(this.client);
     this.redactionRules = new RedactionRuleRepo(this.client);
     this.redactionFindings = new RedactionFindingRepo(this.client);
+    this.catalogInstalls = new CatalogInstallRepo(this.client);
   }
 
   async init(): Promise<void> {
