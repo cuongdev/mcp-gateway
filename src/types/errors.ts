@@ -140,6 +140,40 @@ export class UpstreamTimeoutError extends TransportError {
   }
 }
 
+/**
+ * Thrown by SessionManager.send when the per-server circuit breaker
+ * forbids the call. The HTTP status is 503 so it matches the public
+ * pipeline-level PipelineReject({503, 'circuit_open', …}) semantics.
+ *
+ * `state` is the current health state at the time of rejection, one of:
+ *   - circuit_open     (auto-tripped, will half-open after cooldown)
+ *   - manual_disabled  (admin disabled)
+ *   - quarantined      (auto-tripped too many times)
+ */
+export class UpstreamCircuitOpenError extends GatewayError {
+  constructor(
+    serverName: string,
+    state: "circuit_open" | "manual_disabled" | "quarantined",
+    openedAt?: number,
+    retryAfter?: number,
+  ) {
+    const code =
+      state === "manual_disabled"
+        ? "server_disabled"
+        : state === "quarantined"
+        ? "server_quarantined"
+        : "circuit_open";
+    const message =
+      state === "manual_disabled"
+        ? `Upstream '${serverName}' is administratively disabled.`
+        : state === "quarantined"
+        ? `Upstream '${serverName}' is quarantined.`
+        : `Upstream server '${serverName}' is currently unavailable.`;
+    super(message, code, 503, { serverName, state, openedAt, retryAfter });
+    this.name = "UpstreamCircuitOpenError";
+  }
+}
+
 // ── Configuration Errors ───────────────────────────────────
 
 export class ConfigurationError extends GatewayError {

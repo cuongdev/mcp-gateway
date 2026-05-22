@@ -29,6 +29,8 @@ const MIGRATIONS: Array<{ version: number; name: string; file: string; dialect: 
   { version: 7, name: 'p5_proxies', file: '0007_p5_proxies.postgres.sql', dialect: 'postgres' },
   { version: 8, name: 'p6_foundation', file: '0008_p6_foundation.sqlite.sql', dialect: 'sqlite' },
   { version: 8, name: 'p6_foundation', file: '0008_p6_foundation.postgres.sql', dialect: 'postgres' },
+  { version: 9, name: 'p6_features', file: '0009_p6_features.sqlite.sql', dialect: 'sqlite' },
+  { version: 9, name: 'p6_features', file: '0009_p6_features.postgres.sql', dialect: 'postgres' },
 ];
 
 export function listMigrations(dialect: 'sqlite' | 'postgres' = 'sqlite'): MigrationFile[] {

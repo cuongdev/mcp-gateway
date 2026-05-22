@@ -54,6 +54,9 @@ const ProxiesPage = lazy(() => import('@/features/proxies/page').then((m) => ({ 
 const ProxyNewSheet = lazy(() => import('@/features/proxies/new-sheet').then((m) => ({ default: m.ProxyNewSheet })));
 const ProxyDetailSheet = lazy(() => import('@/features/proxies/detail-sheet').then((m) => ({ default: m.ProxyDetailSheet })));
 
+const CircuitsPage = lazy(() => import('@/features/circuits/page').then((m) => ({ default: m.CircuitsPage })));
+const CircuitDetailSheet = lazy(() => import('@/features/circuits/detail-sheet').then((m) => ({ default: m.CircuitDetailSheet })));
+
 function RouteSuspenseFallback() {
   return (
     <div className="flex h-full items-center justify-center py-24">

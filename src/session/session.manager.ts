@@ -15,7 +15,12 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Dispatcher } from "undici";
 import type { JsonRpcRequest, JsonRpcResponse } from "../types/mcp.js";
-import { UpstreamConnectionError, UpstreamTimeoutError } from "../types/errors.js";
+import {
+  UpstreamConnectionError,
+  UpstreamTimeoutError,
+  UpstreamCircuitOpenError,
+} from "../types/errors.js";
+import type { StateMachine } from "../health/state-machine.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { DiscoveredPrompt } from "../storage/repositories/prompt.repo.js";
 import type { OpenApiAdapter } from "../adapters/openapi/adapter.js";
@@ -150,6 +155,16 @@ export class SessionManager {
    */
   private storage?: StorageAdapter;
 
+  /**
+   * Optional state machine (P6 circuit breaker). When set, `send()` consults
+   * it before dispatching and records the call result afterward. When unset,
+   * `send()` behaves exactly as before (backwards compatible).
+   *
+   * `rawSend()` always bypasses the state machine — it is the path the
+   * background probe loop uses.
+   */
+  private stateMachine?: StateMachine;
+
   constructor(opts: SessionManagerOptions = {}) {
     const timeoutMs = (opts.idleTimeoutSec ?? 600) * 1000;
     if (timeoutMs > 0) {
@@ -194,6 +209,14 @@ export class SessionManager {
    */
   setStorage(storage: StorageAdapter): void {
     this.storage = storage;
+  }
+
+  /**
+   * Wire a state machine (P6 circuit breaker). When set, `send()` will
+   * pre-check + post-record. Idempotent.
+   */
+  setStateMachine(sm: StateMachine | undefined): void {
+    this.stateMachine = sm;
   }
 
   /**
@@ -487,6 +510,88 @@ export class SessionManager {
     const normalized: { timeoutMs?: number; groupProxyName?: string | null } =
       typeof opts === "number" ? { timeoutMs: opts } : (opts ?? {});
 
+    // ── P6 circuit-breaker guard ──────────────────────
+    // If a state machine is wired, consult it BEFORE dispatching. If it
+    // rejects, throw and do NOT record the rejection (the rejection itself
+    // would otherwise double-count as a failure).
+    if (this.stateMachine) {
+      const health = this.stateMachine.getState(serverName);
+      if (
+        health.state === "circuit_open" ||
+        health.state === "manual_disabled" ||
+        health.state === "quarantined"
+      ) {
+        const retryAfter =
+          health.state === "circuit_open" && health.openedAt !== undefined
+            ? health.openedAt + health.config.cooldownMs
+            : undefined;
+        throw new UpstreamCircuitOpenError(
+          serverName,
+          health.state,
+          health.openedAt,
+          retryAfter,
+        );
+      }
+    }
+
+    const started = Date.now();
+    let result: JsonRpcResponse;
+    let success = false;
+    let errorCode: string | undefined;
+    try {
+      result = await this.dispatch(serverName, request, normalized);
+      success = true;
+      return result;
+    } catch (err) {
+      success = false;
+      errorCode =
+        err instanceof Error
+          ? err.name === "UpstreamTimeoutError"
+            ? "upstream_timeout"
+            : err.name === "UpstreamConnectionError"
+            ? "upstream_connection"
+            : err.name
+          : "unknown_error";
+      throw err;
+    } finally {
+      // Always record the call (success or failure) when a state machine
+      // is wired. Skip when there is no state machine (legacy behaviour).
+      if (this.stateMachine) {
+        this.stateMachine.recordCall(serverName, {
+          ts: Date.now(),
+          success,
+          errorCode,
+          latencyMs: Date.now() - started,
+        });
+      }
+    }
+  }
+
+  /**
+   * Send a JSON-RPC request bypassing the circuit-breaker guard.
+   *
+   * This is the path the background probe loop uses: it must reach the
+   * upstream even when the circuit is open or half-open so the state
+   * machine can recover. The result IS NOT recorded to the state machine
+   * here — the caller (ProbeLoop) is responsible for that so it can apply
+   * probe-specific semantics (e.g. error codes like `probe_timeout`).
+   */
+  async rawSend(
+    serverName: string,
+    request: unknown,
+  ): Promise<JsonRpcResponse> {
+    return this.dispatch(serverName, request as JsonRpcRequest, {});
+  }
+
+  /**
+   * Internal dispatcher — performs the actual transport-specific call.
+   * Routes to OpenAPI / HTTP / STDIO without consulting the state machine.
+   */
+  private async dispatch(
+    serverName: string,
+    request: JsonRpcRequest,
+    normalized: { timeoutMs?: number; groupProxyName?: string | null },
+  ): Promise<JsonRpcResponse> {
     // OpenAPI virtual sessions: dispatch via per-tool adapter map.
     if (this.openapiServers.has(serverName)) {
       return this.sendOpenApi(serverName, request);
