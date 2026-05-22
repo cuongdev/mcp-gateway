@@ -23,6 +23,7 @@ import { registerApprovalCommand } from './commands/approval.js';
 import { registerWebhookCommand } from './commands/webhook.js';
 import { registerTenantCommand } from './commands/tenant.js';
 import { registerProxyCommand } from './commands/proxy.js';
+import { registerCircuitCommand } from './commands/circuit.js';
 
 async function main() {
   const program = new Command();
@@ -55,6 +56,7 @@ async function main() {
   registerWebhookCommand(program);
   registerTenantCommand(program);
   registerProxyCommand(program);
+  registerCircuitCommand(program);
 
   await program.parseAsync(process.argv);
 }
