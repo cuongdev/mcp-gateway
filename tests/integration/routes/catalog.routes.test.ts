@@ -121,11 +121,32 @@ describe('catalog admin routes', () => {
     expect(body.installs[0].updateAvailable).toBe(false);
   });
 
-  it('POST /installs/:id/update returns 501 (deferred)', async () => {
-    const r = await env.app.request('/api/catalog/installs/inst_x/update', {
+  it('POST /installs/:id/update with unknown id returns 404', async () => {
+    const r = await env.app.request('/api/catalog/installs/inst_does_not_exist/update', {
       method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
     });
-    expect(r.status).toBe(501);
+    expect(r.status).toBe(404);
+    const body = await r.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
+  });
+
+  it('POST /installs/:id/update without fresh secret returns 400 missing_secrets', async () => {
+    const result = await env.installer.install({
+      connectorId: 'github',
+      name: 'github',
+      env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_x' },
+    });
+    const r = await env.app.request(`/api/catalog/installs/${result.id}/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ env: {} }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: { code: string; missing: string[] } };
+    expect(body.error.code).toBe('missing_secrets');
+    expect(body.error.missing).toContain('GITHUB_PERSONAL_ACCESS_TOKEN');
   });
 
   it('DELETE /installs/:id uninstalls the connector', async () => {

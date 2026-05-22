@@ -61,6 +61,7 @@ import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
 import { createRedactionRoutes } from "./admin/redaction.routes.js";
 import { createResourcesRoutes } from "./admin/resources.routes.js";
 import { createSamplingLogRoutes } from "./admin/sampling-log.routes.js";
+import { createCapabilitiesRoutes } from "./admin/capabilities.routes.js";
 import { createCatalogRoutes } from "./admin/catalog.routes.js";
 import { createVirtualToolsRoutes } from "./admin/virtual-tools.routes.js";
 import type { ToolCache } from "../cache/interface.js";
@@ -97,6 +98,8 @@ interface AdminRouteDeps {
   catalogInstaller?: CatalogInstaller;
   /** Resource registry (P8). When present, /api/resources routes are mounted. */
   resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry;
+  /** Unified capability registry (v0.9 adoption). When present, /api/capabilities mounted. */
+  capabilityRegistry?: import('../capability/registry.js').CapabilityRegistry;
   /** Virtual tool executor (P10). When present, /api/virtual-tools routes are mounted. */
   virtualToolExecutor?: import('../virtual-tools/executor.js').VirtualToolExecutor;
 }
@@ -740,6 +743,11 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
 
   // P8 sampling-log audit (always mounted — repo is part of every storage adapter)
   app.route("/sampling-log", createSamplingLogRoutes({ storage }));
+
+  // v0.9 — unified capability view
+  if (deps.capabilityRegistry) {
+    app.route("/capabilities", createCapabilitiesRoutes({ capabilityRegistry: deps.capabilityRegistry }));
+  }
 
   if (deps.connectorRegistry && deps.catalogInstaller) {
     app.route("/catalog", createCatalogRoutes({
