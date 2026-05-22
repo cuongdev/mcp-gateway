@@ -11,3 +11,10 @@ test('Virtual Tools page renders with new-tool button', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Virtual Tools' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('button', { name: /New virtual tool/i })).toBeVisible();
 });
+
+test('Virtual Tools editor page renders JSON editor + validate button', async ({ page }) => {
+  await enterDevMode(page, '/dashboard/virtual-tools/new');
+  await expect(page.getByRole('heading', { name: /New virtual tool/i })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Validate' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+});

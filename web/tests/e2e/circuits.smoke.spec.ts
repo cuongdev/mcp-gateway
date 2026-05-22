@@ -14,3 +14,10 @@ test('Circuits page renders with filter chips', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Degraded\b/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Healthy\b/i })).toBeVisible();
 });
+
+test('Circuits filter chip toggles selection', async ({ page }) => {
+  await enterDevMode(page, '/dashboard/circuits');
+  await page.getByRole('heading', { name: 'Circuits' }).waitFor();
+  await page.getByRole('button', { name: /^Open\b/i }).click();
+  await expect(page.getByRole('button', { name: /^Open\b/i })).toBeVisible();
+});

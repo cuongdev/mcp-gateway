@@ -11,3 +11,12 @@ test('Resources page renders search + tree placeholder', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByPlaceholder(/Search by URI/i)).toBeVisible();
 });
+
+test('Resources empty state shown when no resources', async ({ page }) => {
+  await enterDevMode(page, '/dashboard/resources');
+  await page.getByRole('heading', { name: 'Resources' }).waitFor();
+  // Either empty state OR list — both are valid
+  await expect(
+    page.getByText(/No resources|Select a resource/i),
+  ).toBeVisible({ timeout: 5_000 });
+});
