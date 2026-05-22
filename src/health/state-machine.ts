@@ -71,6 +71,25 @@ export interface TransitionEvent {
   ts: number;
 }
 
+/**
+ * Snapshot used to restore in-memory state machine entries from storage on
+ * boot. Mirrors the persistent shape in `server_state_repo`. Restoration is
+ * a direct state set — it does NOT fire transition listeners (we don't want
+ * to spam metrics/webhooks with "healthy → healthy" or replay the original
+ * trip event on every restart).
+ */
+export interface RestoreSnapshot {
+  state: ServerHealthState;
+  config?: Partial<CircuitConfig>;
+  rolling?: CallRecord[];
+  consecutiveErrors?: number;
+  openedAt?: number;
+  halfOpenTestAt?: number;
+  reopenCount?: number;
+  lastTransitionReason?: string;
+  lastTransitionAt?: number;
+}
+
 export interface StateMachine {
   getState(serverName: string): ServerHealth;
   recordCall(serverName: string, rec: CallRecord): ServerHealthState;
@@ -81,6 +100,19 @@ export interface StateMachine {
   setConfig(serverName: string, config: Partial<CircuitConfig>): void;
   onTransition(listener: (event: TransitionEvent) => void): () => void;
   listAll(): ServerHealth[];
+  /**
+   * Restore a server's health entry directly from a persisted snapshot.
+   * Idempotent. Does NOT fire transition listeners — use this only on
+   * boot-time hydration, never in response to runtime events.
+   */
+  restore(serverName: string, snapshot: RestoreSnapshot): void;
+  /**
+   * Update / replace the default circuit config used when newly-tracked
+   * servers are auto-registered via `getState`. Returns the current
+   * defaults (after merge).
+   */
+  getDefaults(): CircuitConfig;
+  setDefaults(config: Partial<CircuitConfig>): CircuitConfig;
 }
 
 function freshHealth(serverName: string, config: CircuitConfig): ServerHealth {
@@ -264,6 +296,35 @@ export class InMemoryStateMachine implements StateMachine {
 
   listAll(): ServerHealth[] {
     return Array.from(this.servers.values());
+  }
+
+  /**
+   * Restore a single server's snapshot WITHOUT firing transition listeners.
+   * Used by Gateway.start() to rehydrate from `server_state` rows. Any
+   * fields absent from the snapshot default to a freshly-initialised entry
+   * (state remains whatever the snapshot specifies).
+   */
+  restore(serverName: string, snapshot: RestoreSnapshot): void {
+    const merged = { ...this.defaults, ...(snapshot.config ?? {}) };
+    const base = freshHealth(serverName, merged);
+    base.state = snapshot.state;
+    if (snapshot.rolling) base.rolling = [...snapshot.rolling].slice(-merged.windowSize);
+    base.consecutiveErrors = snapshot.consecutiveErrors ?? 0;
+    base.openedAt = snapshot.openedAt;
+    base.halfOpenTestAt = snapshot.halfOpenTestAt;
+    base.reopenCount = snapshot.reopenCount ?? 0;
+    base.lastTransitionReason = snapshot.lastTransitionReason;
+    base.lastTransitionAt = snapshot.lastTransitionAt ?? base.lastTransitionAt;
+    this.servers.set(serverName, base);
+  }
+
+  getDefaults(): CircuitConfig {
+    return { ...this.defaults };
+  }
+
+  setDefaults(config: Partial<CircuitConfig>): CircuitConfig {
+    this.defaults = { ...this.defaults, ...config };
+    return { ...this.defaults };
   }
 
   // --- internal ---

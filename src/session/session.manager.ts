@@ -31,6 +31,7 @@ import { withSpan, currentTraceparent } from "../observability/spans.js";
 import {
   upstreamLatency,
   proxyRequestsTotal,
+  circuitRejectionsTotal,
 } from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
 
@@ -525,6 +526,7 @@ export class SessionManager {
           health.state === "circuit_open" && health.openedAt !== undefined
             ? health.openedAt + health.config.cooldownMs
             : undefined;
+        try { circuitRejectionsTotal.inc({ server: serverName }); } catch { /* never throw */ }
         throw new UpstreamCircuitOpenError(
           serverName,
           health.state,

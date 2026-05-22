@@ -20,6 +20,8 @@ import { ProxyRepo } from './repositories/proxy.repo.js';
 import { ResourceRepo } from './repositories/resource.repo.js';
 import { RootRepo } from './repositories/root.repo.js';
 import { ServerStateRepo } from './repositories/server-state.repo.js';
+import { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
+import { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -46,6 +48,8 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly resources: ResourceRepo;
   public readonly roots: RootRepo;
   public readonly serverStates: ServerStateRepo;
+  public readonly redactionRules: RedactionRuleRepo;
+  public readonly redactionFindings: RedactionFindingRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -67,6 +71,8 @@ export class SqliteAdapter implements StorageAdapter {
     this.resources = new ResourceRepo(this.client);
     this.roots = new RootRepo(this.client);
     this.serverStates = new ServerStateRepo(this.client);
+    this.redactionRules = new RedactionRuleRepo(this.client);
+    this.redactionFindings = new RedactionFindingRepo(this.client);
   }
 
   async init(): Promise<void> {

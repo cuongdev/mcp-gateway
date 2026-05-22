@@ -125,6 +125,29 @@ export const toolCallDuration = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ── P6 Circuit breaker ───────────────────────────────────
+
+export const circuitStateGauge = new Gauge({
+  name: "mcp_circuit_state",
+  help: "Per-server circuit breaker state. Set to 1 for the current state, 0 for others.",
+  labelNames: ["server", "state"] as const,
+  registers: [metricsRegistry],
+});
+
+export const circuitTripsTotal = new Counter({
+  name: "mcp_circuit_trips_total",
+  help: "Total circuit-breaker trips (transitions into a non-healthy state).",
+  labelNames: ["server", "reason"] as const,
+  registers: [metricsRegistry],
+});
+
+export const circuitRejectionsTotal = new Counter({
+  name: "mcp_circuit_rejections_total",
+  help: "Total upstream calls rejected by an open/disabled/quarantined circuit.",
+  labelNames: ["server"] as const,
+  registers: [metricsRegistry],
+});
+
 /**
  * Creates metrics collection middleware.
  * Tracks request count, duration, and status.

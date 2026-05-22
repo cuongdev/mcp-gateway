@@ -31,7 +31,13 @@ import { PromptRegistry } from "./registry/prompt.registry.js";
 import { ResourceRegistry } from "./registry/resource.registry.js";
 import { RootRegistry } from "./registry/root.registry.js";
 import { CapabilityRegistry } from "./capability/registry.js";
-import { InMemoryStateMachine, type StateMachine } from "./health/state-machine.js";
+import { InMemoryStateMachine, type StateMachine, type TransitionEvent } from "./health/state-machine.js";
+import { ProbeLoop } from "./health/probe-loop.js";
+import { createCircuitsRoutes } from "./routes/admin/circuits.routes.js";
+import {
+  circuitStateGauge,
+  circuitTripsTotal,
+} from "./middleware/monitoring/metrics.middleware.js";
 import { ConnectorRegistry } from "./catalog/connectors.js";
 import { SessionManager } from "./session/session.manager.js";
 import { PolicyEngine } from "./middleware/authz/policy.engine.js";
@@ -92,6 +98,8 @@ export class Gateway {
   private approvalSweepInterval?: ReturnType<typeof setInterval>;
   private webhookDispatcher?: WebhookDispatcher;
   private proxyRegistry?: ProxyRegistry;
+  private probeLoop?: ProbeLoop;
+  private transitionUnsubscribe?: () => void;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -110,6 +118,9 @@ export class Gateway {
     this.stateMachine = new InMemoryStateMachine();
     this.connectorRegistry = new ConnectorRegistry();
     this.sessionManager = new SessionManager();
+    // Wire state machine into session manager so send() consults the
+    // circuit breaker and records the outcome (P6).
+    this.sessionManager.setStateMachine(this.stateMachine);
     this.policyEngine = new PolicyEngine({
       storage,
       modelFile: config.authorization.modelFile,
@@ -321,6 +332,98 @@ export class Gateway {
     this.app.route(`${this.config.gateway.apiPath}/system/tenants`, createTenantsRoutes({ storage: this.storage }));
     log.info({ path: `${this.config.gateway.apiPath}/system/tenants` }, "Registered: System tenant routes");
 
+    // ── P6 Circuit Breaker ──────────────────────────────
+    // Hydrate the in-memory state machine from persisted server_state rows
+    // BEFORE attaching the listener — restore() does not fire transitions
+    // (we don't want every boot to re-emit the original trip events).
+    try {
+      const persisted = await this.storage.serverStates.list();
+      for (const row of persisted) {
+        this.stateMachine.restore(row.serverName, {
+          state: row.state,
+          rolling: row.rollingWindow,
+          consecutiveErrors: row.consecutiveErrors,
+          openedAt: row.openedAt ?? undefined,
+          halfOpenTestAt: row.halfOpenTestAt ?? undefined,
+          reopenCount: row.reopenCount,
+          lastTransitionReason: row.lastTransitionReason ?? undefined,
+          lastTransitionAt: row.updatedAt,
+          config: (row.config as Record<string, never> | null) ?? undefined,
+        });
+      }
+      if (persisted.length > 0) {
+        log.info({ count: persisted.length }, "Restored server_state from storage");
+      }
+    } catch (err) {
+      log.warn({ err }, "Failed to restore server_state on boot (continuing with empty state)");
+    }
+
+    // Attach transition listener — persists every state change + updates
+    // Prometheus metrics + emits server.state.changed webhook event.
+    this.transitionUnsubscribe = this.stateMachine.onTransition((event: TransitionEvent) => {
+      // Persist (fire-and-forget; we don't want listener latency to
+      // affect the in-memory state machine).
+      void (async () => {
+        try {
+          const h = this.stateMachine.getState(event.serverName);
+          await this.storage.serverStates.upsert({
+            serverName: event.serverName,
+            state: event.to,
+            consecutiveErrors: h.consecutiveErrors,
+            rollingWindow: h.rolling,
+            openedAt: h.openedAt ?? null,
+            halfOpenTestAt: h.halfOpenTestAt ?? null,
+            reopenCount: h.reopenCount,
+            config: h.config as unknown as Record<string, unknown>,
+            lastTransitionReason: event.reason,
+          });
+        } catch (err) {
+          log.warn({ err, server: event.serverName }, "Failed to persist server_state transition");
+        }
+      })();
+
+      // Update Prometheus gauges: set 1 for the new state, 0 for all
+      // others on the same server. (We can't enumerate all server-state
+      // pairs ahead of time so we zero the OLD state when applicable.)
+      try {
+        const states: ReadonlyArray<TransitionEvent["to"]> = [
+          "healthy", "degraded", "circuit_open", "half_open", "quarantined", "manual_disabled",
+        ];
+        for (const s of states) {
+          circuitStateGauge.set({ server: event.serverName, state: s }, s === event.to ? 1 : 0);
+        }
+        if (event.to === "circuit_open" || event.to === "quarantined" || event.to === "manual_disabled") {
+          circuitTripsTotal.inc({ server: event.serverName, reason: event.reason });
+        }
+      } catch { /* metrics never throw into the listener */ }
+
+      // Webhook event — fire-and-forget.
+      if (this.webhookDispatcher) {
+        void this.webhookDispatcher
+          .emit("server.state.changed", {
+            server: event.serverName,
+            from: event.from,
+            to: event.to,
+            reason: event.reason,
+            ts: event.ts,
+          })
+          .catch(() => {});
+      }
+    });
+
+    // Mount /api/circuits admin routes.
+    this.app.route(`${this.config.gateway.apiPath}/circuits`, createCircuitsRoutes({
+      stateMachine: this.stateMachine,
+      storage: this.storage,
+    }));
+    log.info({ path: `${this.config.gateway.apiPath}/circuits` }, "Registered: Circuit-breaker admin routes");
+
+    // Start the background probe loop. SessionManager satisfies ProbeTarget
+    // via rawSend(). The probe path does NOT consult the circuit guard.
+    this.probeLoop = new ProbeLoop(this.stateMachine, this.sessionManager);
+    this.probeLoop.start();
+    log.info("Registered: Circuit-breaker probe loop");
+
     // Mount rate-limit middleware on MCP routes only (requires async backend init).
     // Registered BEFORE the HTTP server starts; Hono dispatches middleware by
     // path pattern regardless of route-registration order.
@@ -490,6 +593,14 @@ export class Gateway {
 
     if (this.proxyRegistry) {
       await this.proxyRegistry.shutdown();
+    }
+
+    if (this.probeLoop) {
+      this.probeLoop.stop();
+    }
+    if (this.transitionUnsubscribe) {
+      this.transitionUnsubscribe();
+      this.transitionUnsubscribe = undefined;
     }
 
     log.info("Gateway shut down complete");

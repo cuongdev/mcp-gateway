@@ -16,6 +16,8 @@ import type { ProxyRepo } from './repositories/proxy.repo.js';
 import type { ResourceRepo } from './repositories/resource.repo.js';
 import type { RootRepo } from './repositories/root.repo.js';
 import type { ServerStateRepo } from './repositories/server-state.repo.js';
+import type { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
+import type { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -47,4 +49,6 @@ export interface StorageAdapter {
   resources: ResourceRepo;
   roots: RootRepo;
   serverStates: ServerStateRepo;
+  redactionRules: RedactionRuleRepo;
+  redactionFindings: RedactionFindingRepo;
 }
