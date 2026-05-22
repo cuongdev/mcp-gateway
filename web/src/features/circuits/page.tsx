@@ -24,13 +24,15 @@ export function CircuitsPage() {
     if (filter === 'all') return list;
     return list.filter((c) => c.state === filter);
   }, [data, filter]);
-  const counts = useMemo(() => {
+  const counts = useMemo<Record<typeof FILTERS[number]['key'], number>>(() => {
     const list = data?.circuits ?? [];
     return {
       all: list.length,
-      circuit_open: list.filter((c) => c.state === 'circuit_open').length,
-      degraded: list.filter((c) => c.state === 'degraded').length,
       healthy: list.filter((c) => c.state === 'healthy').length,
+      degraded: list.filter((c) => c.state === 'degraded').length,
+      circuit_open: list.filter((c) => c.state === 'circuit_open').length,
+      half_open: list.filter((c) => c.state === 'half_open').length,
+      quarantined: list.filter((c) => c.state === 'quarantined').length,
       manual_disabled: list.filter((c) => c.state === 'manual_disabled').length,
     };
   }, [data]);

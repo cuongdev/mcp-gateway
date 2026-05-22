@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Home, Server, Wrench, LayoutGrid, MessageSquare, Network,
   Users, Bot, Key, ShieldCheck, Lock,
-  Gauge, Database, Boxes, BadgeCheck,
+  Gauge, Database, Boxes, BadgeCheck, Zap,
   BarChart3, ScrollText, Activity, HeartPulse,
   Building2, Webhook, Settings, Command as CommandIcon,
 } from 'lucide-react';
@@ -42,6 +42,7 @@ const groups: Group[] = [
   {
     id: 'reliability', label: 'Reliability',
     items: [
+      { to: '/circuits', label: 'Circuits', icon: Zap },
       { to: '/rate-limit', label: 'Rate Limit', icon: Gauge },
       { to: '/quota', label: 'Quota', icon: Database },
       { to: '/cache', label: 'Cache', icon: Boxes },

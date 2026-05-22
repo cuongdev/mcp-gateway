@@ -93,6 +93,9 @@ export function App() {
                   <Route path="new" element={<ProxyNewSheet />} />
                   <Route path=":id" element={<ProxyDetailSheet />} />
                 </Route>
+                <Route path="/circuits" element={<CircuitsPage />}>
+                  <Route path=":server" element={<CircuitDetailSheet />} />
+                </Route>
                 {/* IDENTITY */}
                 <Route path="/users" element={<UsersPage />}>
                   <Route path="new" element={<UserNewSheet />} />
