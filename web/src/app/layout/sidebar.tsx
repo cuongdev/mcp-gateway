@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  Home, Server, Wrench, LayoutGrid, MessageSquare, Network,
+  Home, Server, Wrench, LayoutGrid, MessageSquare, Network, Boxes as PackageIcon,
   Users, Bot, Key, ShieldCheck, Lock,
   Gauge, Database, Boxes, BadgeCheck, Zap, ShieldAlert,
   BarChart3, ScrollText, Activity, HeartPulse,
@@ -20,8 +20,9 @@ interface Group { id: string; label: string; items: Item[]; defaultOpen?: boolea
 
 const groups: Group[] = [
   {
-    id: 'routing', label: 'Routing', defaultOpen: true,
+    id: 'routing', label: 'Servers & Tools', defaultOpen: true,
     items: [
+      { to: '/catalog', label: 'Catalog', icon: PackageIcon },
       { to: '/servers', label: 'Servers', icon: Server },
       { to: '/tools', label: 'Tools', icon: Wrench },
       { to: '/groups', label: 'Tool Groups', icon: LayoutGrid },
