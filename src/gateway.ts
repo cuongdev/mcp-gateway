@@ -218,6 +218,8 @@ export class Gateway {
       // Re-wiring is not required since emit() reads from the dispatcher via
       // closure at call-time and the installer is reconstructed if needed.
       undefined,
+      // P6 — pass state machine so options.enableCircuitBreaker takes effect.
+      this.stateMachine,
     );
 
     const adminRoutes = createAdminRoutes({

@@ -90,6 +90,8 @@ export class CatalogInstaller {
     private readonly sessionManager: SessionManager,
     private readonly toolRegistry: ToolRegistry,
     private readonly webhookDispatcher?: WebhookDispatcher,
+    /** P6 state machine — when present, options.enableCircuitBreaker can override per-server config. */
+    private readonly stateMachine?: import('../health/state-machine.js').StateMachine,
   ) {}
 
   async install(input: InstallInput): Promise<InstallResult> {
@@ -123,6 +125,34 @@ export class CatalogInstaller {
     });
     if (input.options?.proxyName !== undefined) {
       await this.storage.servers.setProxyName(input.name, input.options.proxyName);
+    }
+
+    // 5a. Wire circuit-breaker config from the template's defaults (if any)
+    // and from the install option. enableCircuitBreaker=false explicitly
+    // sets a tolerant config (effectively disables tripping).
+    if (this.stateMachine) {
+      if (input.options?.enableCircuitBreaker === false) {
+        // Effectively disable by setting very high thresholds.
+        this.stateMachine.setConfig(input.name, {
+          consecutiveErrorsToTrip: 10_000,
+          errorRateThreshold: 0.99,
+        });
+        log.info({ server: input.name }, 'Catalog install — circuit breaker tolerated per install option');
+      } else if (template.defaults?.circuit) {
+        this.stateMachine.setConfig(input.name, template.defaults.circuit);
+        log.info({ server: input.name, config: template.defaults.circuit },
+          'Catalog install — circuit config from template defaults');
+      }
+    }
+
+    // 5b. applyRedaction is currently a no-op acknowledgment: tenant-level
+    // redaction rules already apply to ALL servers in a tenant. The flag is
+    // accepted for forward-compat with per-server redaction overrides.
+    if (input.options?.applyRedaction === false) {
+      log.info(
+        { server: input.name },
+        'Catalog install — applyRedaction=false noted; per-server opt-out is a v0.9 feature, tenant rules still apply',
+      );
     }
 
     // 6. Register + optionally discover (with rollback on failure)
