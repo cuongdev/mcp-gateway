@@ -1,0 +1,13 @@
+{
+  "_doc": "Performance baseline. Update when intentional perf changes ship. Each entry is a LatencyStats snapshot.",
+  "v0.7.0-p5": {
+    "tools/call": { "count": 100, "p50": 3, "p95": 8, "p99": 15, "mean": 4, "min": 1, "max": 25 },
+    "resources/read": { "count": 100, "p50": 4, "p95": 10, "p99": 20, "mean": 5, "min": 1, "max": 30 }
+  },
+  "v0.8.0-pipeline-target": {
+    "tools/call_p99_max_ms": 18,
+    "resources/read_p99_max_ms": 24,
+    "virtual_tool_3step_p99_max_ms": 60,
+    "_note": "v0.8 adds an interceptor chain + redaction + circuit breaker per call; budget is +20% over v0.7."
+  }
+}
