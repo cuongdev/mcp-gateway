@@ -35,6 +35,9 @@ import type { RedactionEngineFactory } from "../redaction/factory.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import { RedactionBlock } from "../redaction/types.js";
 import { newId } from "../utils/uuid.js";
+import type { VirtualToolRepo, VirtualToolRow } from "../storage/repositories/virtual-tool.repo.js";
+import type { VirtualToolExecutor } from "../virtual-tools/executor.js";
+import type { VirtualToolPlan } from "../virtual-tools/types.js";
 
 /** Map a RegisteredTool to the MCP-protocol tool shape. */
 function toMCPTool(r: RegisteredTool): MCPTool {
@@ -43,6 +46,24 @@ function toMCPTool(r: RegisteredTool): MCPTool {
     description: r.description,
     inputSchema: r.inputSchema as MCPTool["inputSchema"],
   };
+}
+
+/** Map a stored virtual tool row to the MCP `tools/list` shape with `_virtual` marker. */
+function virtualToMCPTool(vt: VirtualToolRow): MCPTool {
+  let schema: Record<string, unknown> = { type: 'object' };
+  try {
+    const parsed = JSON.parse(vt.inputSchemaJson);
+    if (parsed && typeof parsed === 'object') schema = parsed as Record<string, unknown>;
+  } catch {
+    /* keep default */
+  }
+  return {
+    name: vt.canonicalName,
+    description: vt.description ?? '',
+    inputSchema: schema as MCPTool["inputSchema"],
+    // Extension field: lets clients badge virtual tools in their UIs.
+    _virtual: true,
+  } as MCPTool & { _virtual: true };
 }
 
 /** Distinct server names known to the registry, sorted. */
@@ -78,6 +99,9 @@ interface MCPRouteDeps {
   /** Optional — when present, /mcp tools/call applies redaction on request + response. */
   redactionFactory?: RedactionEngineFactory;
   storage?: StorageAdapter;
+  /** P10 — when present, tools/list adds virtual tools and tools/call delegates. */
+  virtualToolRepo?: VirtualToolRepo;
+  virtualToolExecutor?: VirtualToolExecutor;
 }
 
 /**
@@ -111,6 +135,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       redactionFactory,
       storage,
       deps.resourceRegistry,
+      { virtualToolRepo: deps.virtualToolRepo, virtualToolExecutor: deps.virtualToolExecutor },
     );
 
     // Set MCP session header
@@ -174,6 +199,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       redactionFactory,
       storage,
       deps.resourceRegistry,
+      { virtualToolRepo: deps.virtualToolRepo, virtualToolExecutor: deps.virtualToolExecutor },
     );
 
     c.header("Mcp-Session-Id", ctx?.requestId ?? uuidv4());
@@ -184,6 +210,11 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
 }
 
 // ── Core MCP Request Handler ─────────────────────────────
+
+interface HandleExtras {
+  virtualToolRepo?: VirtualToolRepo;
+  virtualToolExecutor?: VirtualToolExecutor;
+}
 
 async function handleMCPRequest(
   request: JsonRpcRequest,
@@ -196,6 +227,7 @@ async function handleMCPRequest(
   redactionFactory?: RedactionEngineFactory,
   storage?: StorageAdapter,
   resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry,
+  extras: HandleExtras = {},
 ): Promise<JsonRpcResponse> {
   const { method, params, id } = request;
 
@@ -240,6 +272,18 @@ async function handleMCPRequest(
           .map(toMCPTool);
       } else {
         tools = registry.list().map(toMCPTool);
+        // P10: merge in enabled virtual tools (group-scoped listings are not extended).
+        if (extras.virtualToolRepo) {
+          try {
+            const vts = await extras.virtualToolRepo.list();
+            for (const vt of vts) {
+              if (!vt.enabled) continue;
+              tools.push(virtualToMCPTool(vt));
+            }
+          } catch (err) {
+            log.warn({ err }, 'failed to list virtual tools; serving native tools only');
+          }
+        }
       }
       return createSuccessResponse(id, { tools });
     }
@@ -271,6 +315,40 @@ async function handleMCPRequest(
                   MCP_ERROR_CODES.METHOD_NOT_FOUND,
                   `Tool '${canonicalName}' is not part of group '${groupName}'`
                 );
+              }
+            }
+
+            // P10: virtual tool delegation. Checked before the native registry
+            // lookup so a virtual-tool name shadowing a native canonical wins.
+            if (extras.virtualToolRepo && extras.virtualToolExecutor) {
+              const vt = await extras.virtualToolRepo.findByName(canonicalName).catch(() => null);
+              if (vt && vt.enabled) {
+                try {
+                  const plan = JSON.parse(vt.planJson) as VirtualToolPlan;
+                  const tenantId = ((context as { tenantId?: string })?.tenantId) ?? undefined;
+                  const principalId =
+                    ((context as { user?: { id?: string } })?.user?.id) ?? undefined;
+                  const result = await extras.virtualToolExecutor.execute(
+                    plan,
+                    params?.arguments,
+                    { tenantId, principalId },
+                  );
+                  toolCallDuration.observe(
+                    { tool: canonicalName, result: "success" },
+                    (Date.now() - toolStart) / 1000,
+                  );
+                  return createSuccessResponse(id, result);
+                } catch (err) {
+                  toolCallDuration.observe(
+                    { tool: canonicalName, result: "error" },
+                    (Date.now() - toolStart) / 1000,
+                  );
+                  return createErrorResponse(
+                    id,
+                    MCP_ERROR_CODES.INTERNAL_ERROR,
+                    `Virtual tool '${canonicalName}' failed: ${(err as Error)?.message ?? String(err)}`,
+                  );
+                }
               }
             }
 
