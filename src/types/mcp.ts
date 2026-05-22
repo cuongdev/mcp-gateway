@@ -64,6 +64,9 @@ export const MCP_METHODS = {
   // Roots (reverse channel — gateway exposes admin view only in v1)
   ROOTS_LIST: "roots/list",
 
+  // Sampling (reverse channel — full mux deferred to v0.9; gateway logs attempts in v0.8)
+  SAMPLING_CREATE_MESSAGE: "sampling/createMessage",
+
   // Logging
   LOG_SET_LEVEL: "logging/setLevel",
 

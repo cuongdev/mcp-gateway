@@ -20,6 +20,7 @@ import type { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
 import type { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
 import type { CatalogInstallRepo } from './repositories/catalog-install.repo.js';
 import type { VirtualToolRepo } from './repositories/virtual-tool.repo.js';
+import type { SamplingLogRepo } from './repositories/sampling-log.repo.js';
 
 export interface Tx {
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number; lastInsertRowid?: bigint }>;
@@ -55,4 +56,5 @@ export interface StorageAdapter {
   redactionFindings: RedactionFindingRepo;
   catalogInstalls: CatalogInstallRepo;
   virtualTools: VirtualToolRepo;
+  samplingLog: SamplingLogRepo;
 }

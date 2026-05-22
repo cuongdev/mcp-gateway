@@ -35,6 +35,12 @@ import type { RedactionEngineFactory } from "../redaction/factory.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import { RedactionBlock } from "../redaction/types.js";
 import { newId } from "../utils/uuid.js";
+import { createHash } from "node:crypto";
+
+/** Short SHA-256 hash (first 16 hex chars) for sampling-log payload fingerprints. */
+function hashShort(s: string): string {
+  return createHash('sha256').update(s).digest('hex').slice(0, 16);
+}
 import type { VirtualToolRepo, VirtualToolRow } from "../storage/repositories/virtual-tool.repo.js";
 import type { VirtualToolExecutor } from "../virtual-tools/executor.js";
 import type { VirtualToolPlan } from "../virtual-tools/types.js";
@@ -609,7 +615,47 @@ async function handleMCPRequest(
     case MCP_METHODS.ROOTS_LIST: {
       // In v1 the gateway returns its own roots view (admin-managed),
       // not a fan-out reverse channel to clients. Empty list is spec-valid.
+      // Audit the attempt so admins can see when clients ask for roots.
+      if (storage) {
+        const sessionId = context?.requestId ?? 'unknown';
+        const principalId = ((context as { user?: { id?: string } })?.user?.id) ?? null;
+        await storage.samplingLog.record({
+          id: `sl_${newId().slice(4)}`,
+          requestId: String(id ?? sessionId),
+          upstreamServer: 'gateway',
+          clientSessionId: sessionId,
+          principalId,
+          method: 'roots/list',
+          requestPayloadHash: hashShort(JSON.stringify(request)),
+          outcome: 'success',
+        }).catch(() => undefined);
+      }
       return createSuccessResponse(id, { roots: [] });
+    }
+
+    case MCP_METHODS.SAMPLING_CREATE_MESSAGE: {
+      // Reverse-channel sampling: in v0.8 the gateway has no mux to fan back
+      // to the client, so direct client-initiated calls are recorded then
+      // rejected with method_not_supported. v0.9 wires the SSE mux.
+      if (storage) {
+        const sessionId = context?.requestId ?? 'unknown';
+        const principalId = ((context as { user?: { id?: string } })?.user?.id) ?? null;
+        await storage.samplingLog.record({
+          id: `sl_${newId().slice(4)}`,
+          requestId: String(id ?? sessionId),
+          upstreamServer: 'unknown',
+          clientSessionId: sessionId,
+          principalId,
+          method: 'sampling/createMessage',
+          requestPayloadHash: hashShort(JSON.stringify(request)),
+          outcome: 'method_not_supported',
+        }).catch(() => undefined);
+      }
+      return createErrorResponse(
+        id,
+        MCP_ERROR_CODES.METHOD_NOT_FOUND,
+        "sampling/createMessage reverse channel is not yet implemented (deferred to v0.9). The attempt has been logged.",
+      );
     }
 
     // ── Prompts ──────────────────────────────────────

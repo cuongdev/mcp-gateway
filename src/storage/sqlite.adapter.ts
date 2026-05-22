@@ -24,6 +24,7 @@ import { RedactionRuleRepo } from './repositories/redaction-rule.repo.js';
 import { RedactionFindingRepo } from './repositories/redaction-finding.repo.js';
 import { CatalogInstallRepo } from './repositories/catalog-install.repo.js';
 import { VirtualToolRepo } from './repositories/virtual-tool.repo.js';
+import { SamplingLogRepo } from './repositories/sampling-log.repo.js';
 
 export interface SqliteAdapterOptions {
   url: string;                  // 'file:./data/mcp.sqlite' or ':memory:'
@@ -54,6 +55,7 @@ export class SqliteAdapter implements StorageAdapter {
   public readonly redactionFindings: RedactionFindingRepo;
   public readonly catalogInstalls: CatalogInstallRepo;
   public readonly virtualTools: VirtualToolRepo;
+  public readonly samplingLog: SamplingLogRepo;
 
   constructor(options: SqliteAdapterOptions) {
     this.client = createClient({ url: options.url, authToken: options.authToken });
@@ -79,6 +81,7 @@ export class SqliteAdapter implements StorageAdapter {
     this.redactionFindings = new RedactionFindingRepo(this.client);
     this.catalogInstalls = new CatalogInstallRepo(this.client);
     this.virtualTools = new VirtualToolRepo(this.client);
+    this.samplingLog = new SamplingLogRepo(this.client);
   }
 
   async init(): Promise<void> {

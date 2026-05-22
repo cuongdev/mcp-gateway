@@ -60,6 +60,7 @@ import { createCacheRoutes } from "./admin/cache.routes.js";
 import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
 import { createRedactionRoutes } from "./admin/redaction.routes.js";
 import { createResourcesRoutes } from "./admin/resources.routes.js";
+import { createSamplingLogRoutes } from "./admin/sampling-log.routes.js";
 import { createCatalogRoutes } from "./admin/catalog.routes.js";
 import { createVirtualToolsRoutes } from "./admin/virtual-tools.routes.js";
 import type { ToolCache } from "../cache/interface.js";
@@ -736,6 +737,9 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       sessionManager,
     }));
   }
+
+  // P8 sampling-log audit (always mounted — repo is part of every storage adapter)
+  app.route("/sampling-log", createSamplingLogRoutes({ storage }));
 
   if (deps.connectorRegistry && deps.catalogInstaller) {
     app.route("/catalog", createCatalogRoutes({

@@ -66,6 +66,8 @@ const ResourcesPage = lazy(() => import('@/features/resources/page').then((m) =>
 const VirtualToolsPage = lazy(() => import('@/features/virtual-tools/page').then((m) => ({ default: m.VirtualToolsPage })));
 const VirtualToolEditorPage = lazy(() => import('@/features/virtual-tools/editor-page').then((m) => ({ default: m.VirtualToolEditorPage })));
 
+const SamplingLogPage = lazy(() => import('@/features/sampling-log/page').then((m) => ({ default: m.SamplingLogPage })));
+
 function RouteSuspenseFallback() {
   return (
     <div className="flex h-full items-center justify-center py-24">
@@ -89,6 +91,7 @@ export function App() {
                 <Route path="/resources" element={<ResourcesPage />} />
                 <Route path="/virtual-tools" element={<VirtualToolsPage />} />
                 <Route path="/virtual-tools/:name" element={<VirtualToolEditorPage />} />
+                <Route path="/sampling-log" element={<SamplingLogPage />} />
                 {/* ROUTING */}
                 <Route path="/servers" element={<ServersPage />}>
                   <Route path="new" element={<ServerNewSheet />} />

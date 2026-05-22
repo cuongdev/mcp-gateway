@@ -63,6 +63,7 @@ const groups: Group[] = [
     items: [
       { to: '/usage', label: 'Usage', icon: BarChart3 },
       { to: '/audit', label: 'Audit', icon: ScrollText },
+      { to: '/sampling-log', label: 'Sampling Log', icon: ScrollText },
       { to: '/metrics', label: 'Metrics', icon: Activity },
       { to: '/health', label: 'Health', icon: HeartPulse },
     ],
