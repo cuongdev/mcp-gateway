@@ -2,18 +2,41 @@ import { useMemo } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Plus, Server as ServerIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/data-table';
 import { StatusDot } from '@/components/status-dot';
 import { EmptyState } from '@/components/empty-state';
+import { api } from '@/lib/api';
 import { useServers } from './api';
 import type { ServerSummary } from '@/types/api';
+
+interface CircuitSummary { serverName: string; state: string }
+const CIRCUIT_TONE: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
+  healthy: { variant: 'secondary', label: 'healthy' },
+  degraded: { variant: 'default', label: 'degraded' },
+  circuit_open: { variant: 'destructive', label: 'open' },
+  half_open: { variant: 'default', label: 'half-open' },
+  quarantined: { variant: 'destructive', label: 'quarantined' },
+  manual_disabled: { variant: 'outline', label: 'disabled' },
+};
 
 export function ServersPage() {
   const navigate = useNavigate();
   const { data, isLoading } = useServers();
   const servers = data?.servers ?? [];
+
+  const { data: circuitsData } = useQuery({
+    queryKey: ['circuits'],
+    queryFn: () => api<{ circuits: CircuitSummary[] }>('/api/circuits').catch(() => ({ circuits: [] })),
+    refetchInterval: 10_000,
+  });
+  const circuitByServer = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of circuitsData?.circuits ?? []) map.set(c.serverName, c.state);
+    return map;
+  }, [circuitsData]);
 
   const columns = useMemo<ColumnDef<ServerSummary>[]>(() => [
     {
@@ -36,7 +59,17 @@ export function ServersPage() {
         </div>
       ),
     },
-  ], []);
+    {
+      id: 'circuit',
+      header: 'Circuit',
+      cell: ({ row }) => {
+        const state = circuitByServer.get(row.original.name);
+        if (!state) return <span className="text-xs text-muted-foreground">—</span>;
+        const tone = CIRCUIT_TONE[state] ?? { variant: 'outline' as const, label: state };
+        return <Badge variant={tone.variant} className="text-xs">{tone.label}</Badge>;
+      },
+    },
+  ], [circuitByServer]);
 
   return (
     <div className="space-y-6">

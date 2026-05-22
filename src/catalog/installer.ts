@@ -9,6 +9,7 @@
 
 import { logger } from '../utils/logger.js';
 import { newId } from '../utils/uuid.js';
+import type { EventName } from '../notify/events.js';
 import {
   ConnectorNotFoundError,
   GatewayError,
@@ -174,7 +175,7 @@ export class CatalogInstaller {
     // 8. Emit webhook
     if (this.webhookDispatcher) {
       void this.webhookDispatcher
-        .emit('catalog.installed' as never, {
+        .emit('catalog.installed' as EventName, {
           installId,
           serverName: input.name,
           connectorId: template.id,
@@ -233,7 +234,7 @@ export class CatalogInstaller {
 
     if (this.webhookDispatcher) {
       void this.webhookDispatcher
-        .emit('catalog.uninstalled' as never, {
+        .emit('catalog.uninstalled' as EventName, {
           installId: install.id,
           serverName,
           connectorId: install.connectorId,

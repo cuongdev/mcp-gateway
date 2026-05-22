@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { Server, Wrench, LayoutGrid, Zap } from 'lucide-react';
+import { Server, Wrench, LayoutGrid, Zap, ShieldAlert, Boxes, ZapOff } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -25,7 +25,7 @@ export function OverviewPage() {
   // shift each tick and trigger needless refetches. Once-per-mount is fine
   // for a 24h aggregate.
   const since = useMemo(() => Date.now() - ONE_DAY_MS, []);
-  const [serversQ, toolsQ, groupsQ, usageQ] = useQueries({
+  const [serversQ, toolsQ, groupsQ, usageQ, circuitsQ, redactionStatsQ, installsQ] = useQueries({
     queries: [
       { queryKey: queryKeys.servers, queryFn: () => api<{ servers: ServerSummary[] }>('/api/servers') },
       { queryKey: queryKeys.tools(), queryFn: () => api<{ tools: ToolSummary[]; total: number }>('/api/tools') },
@@ -33,6 +33,21 @@ export function OverviewPage() {
       {
         queryKey: queryKeys.usage({ since, by: 'tool', action: 'tool.call' }),
         queryFn: () => api<UsageResponse>(`/api/usage?since=${since}&by=tool&action=tool.call`),
+      },
+      {
+        queryKey: ['circuits'],
+        queryFn: () => api<{ circuits: Array<{ state: string }> }>('/api/circuits').catch(() => ({ circuits: [] })),
+        refetchInterval: 30_000,
+      },
+      {
+        queryKey: ['redaction', 'stats'],
+        queryFn: () => api<{ totalLast24h: number }>('/api/redaction/stats').catch(() => ({ totalLast24h: 0 })),
+        refetchInterval: 30_000,
+      },
+      {
+        queryKey: ['catalog', 'installs'],
+        queryFn: () => api<{ installs: Array<{ updateAvailable: boolean }> }>('/api/catalog/installs').catch(() => ({ installs: [] })),
+        refetchInterval: 60_000,
       },
     ],
   });
@@ -42,6 +57,9 @@ export function OverviewPage() {
   const groupCount = groupsQ.data?.groups.length ?? 0;
   const usage = usageQ.data?.series ?? [];
   const reqTotal = usage.reduce((acc, b) => acc + b.total, 0);
+  const openCircuits = (circuitsQ.data?.circuits ?? []).filter((c) => c.state === 'circuit_open' || c.state === 'quarantined').length;
+  const findings24h = redactionStatsQ.data?.totalLast24h ?? 0;
+  const updatesAvailable = (installsQ.data?.installs ?? []).filter((i) => i.updateAvailable).length;
 
   // Crude hourly sparkline from /usage 24h aggregate by tool — we don't have
   // per-hour buckets in Phase A; show top tools as bar substitute.
@@ -59,6 +77,12 @@ export function OverviewPage() {
         <StatCard label="Registered Tools" value={toolTotal} icon={Wrench} tone="default" />
         <StatCard label="Tool Groups" value={groupCount} icon={LayoutGrid} tone="success" />
         <StatCard label="Tool calls (24h)" value={reqTotal.toLocaleString()} icon={Zap} tone="warning" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard label="Open circuits" value={openCircuits} icon={ZapOff} tone={openCircuits > 0 ? 'danger' : 'default'} />
+        <StatCard label="Redaction findings (24h)" value={findings24h.toLocaleString()} icon={ShieldAlert} tone={findings24h > 0 ? 'warning' : 'default'} />
+        <StatCard label="Catalog updates available" value={updatesAvailable} icon={Boxes} tone={updatesAvailable > 0 ? 'warning' : 'default'} />
       </div>
 
       <Card>
