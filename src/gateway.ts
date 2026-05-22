@@ -31,6 +31,7 @@ import { PromptRegistry } from "./registry/prompt.registry.js";
 import { ResourceRegistry } from "./registry/resource.registry.js";
 import { RootRegistry } from "./registry/root.registry.js";
 import { CapabilityRegistry } from "./capability/registry.js";
+import { VirtualToolExecutor } from "./virtual-tools/executor.js";
 import { InMemoryStateMachine, type StateMachine, type TransitionEvent } from "./health/state-machine.js";
 import { ProbeLoop } from "./health/probe-loop.js";
 import { createCircuitsRoutes } from "./routes/admin/circuits.routes.js";
@@ -88,6 +89,7 @@ export class Gateway {
   private resourceRegistry: ResourceRegistry;
   private rootRegistry: RootRegistry;
   private capabilityRegistry: CapabilityRegistry;
+  private virtualToolExecutor!: VirtualToolExecutor;
   private stateMachine: StateMachine;
   private connectorRegistry: ConnectorRegistry;
   private sessionManager: SessionManager;
@@ -126,6 +128,10 @@ export class Gateway {
     // Wire state machine into session manager so send() consults the
     // circuit breaker and records the outcome (P6).
     this.sessionManager.setStateMachine(this.stateMachine);
+    // P10 — Virtual tool executor. Cheap to construct; reuses session manager.
+    this.virtualToolExecutor = new VirtualToolExecutor(
+      this.capabilityRegistry, this.sessionManager,
+    );
     this.policyEngine = new PolicyEngine({
       storage,
       modelFile: config.authorization.modelFile,
@@ -182,6 +188,8 @@ export class Gateway {
       resourceRegistry: this.resourceRegistry,
       redactionFactory: this.redactionFactory,
       storage: this.storage,
+      virtualToolRepo: this.storage.virtualTools,
+      virtualToolExecutor: this.virtualToolExecutor,
     });
     this.app.route(mcpPath, mcpRoutes);
 
@@ -226,6 +234,7 @@ export class Gateway {
       redactionFactory: this.redactionFactory,
       connectorRegistry: this.connectorRegistry,
       catalogInstaller: this.catalogInstaller,
+      resourceRegistry: this.resourceRegistry,
     });
     this.app.route(apiPath, adminRoutes);
 

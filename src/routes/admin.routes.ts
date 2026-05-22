@@ -59,6 +59,7 @@ import { createAuditRoutes } from "./admin/audit.routes.js";
 import { createCacheRoutes } from "./admin/cache.routes.js";
 import { createSystemInfoRoutes } from "./admin/system-info.routes.js";
 import { createRedactionRoutes } from "./admin/redaction.routes.js";
+import { createResourcesRoutes } from "./admin/resources.routes.js";
 import { createCatalogRoutes } from "./admin/catalog.routes.js";
 import type { ToolCache } from "../cache/interface.js";
 import type { ProxyRegistry } from "../proxy/registry.js";
@@ -92,6 +93,8 @@ interface AdminRouteDeps {
   /** Connector catalog (P9). When both are present, /api/catalog routes are mounted. */
   connectorRegistry?: ConnectorRegistry;
   catalogInstaller?: CatalogInstaller;
+  /** Resource registry (P8). When present, /api/resources routes are mounted. */
+  resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry;
 }
 
 /**
@@ -721,6 +724,13 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     app.route("/redaction", createRedactionRoutes({
       storage,
       engineFactory: deps.redactionFactory,
+    }));
+  }
+
+  if (deps.resourceRegistry) {
+    app.route("/resources", createResourcesRoutes({
+      resourceRegistry: deps.resourceRegistry,
+      sessionManager,
     }));
   }
 
