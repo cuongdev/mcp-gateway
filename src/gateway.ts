@@ -70,6 +70,7 @@ import { ProxyRegistry } from "./proxy/registry.js";
 import { bootstrapFromConfig } from "./storage/bootstrap.js";
 import { RedactionEngineFactory } from "./redaction/factory.js";
 import { seedAllTenants } from "./redaction/seed.js";
+import { ReverseChannelMux } from "./pipeline/reverse-channel.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,6 +108,7 @@ export class Gateway {
   private catalogInstaller?: CatalogInstaller;
   private probeLoop?: ProbeLoop;
   private transitionUnsubscribe?: () => void;
+  private reverseChannel: ReverseChannelMux;
 
   constructor(config: GatewayConfig, storage: StorageAdapter) {
     this.config = config;
@@ -128,6 +130,11 @@ export class Gateway {
     // Wire state machine into session manager so send() consults the
     // circuit breaker and records the outcome (P6).
     this.sessionManager.setStateMachine(this.stateMachine);
+    // v0.9 — Reverse-channel mux for upstream-initiated reverse JSON-RPC
+    // (sampling/createMessage, roots/list). Used by the SSE GET /mcp
+    // route to register client channels. Session-binding wiring lives
+    // in the next commit.
+    this.reverseChannel = new ReverseChannelMux();
     // P10 — Virtual tool executor. Cheap to construct; reuses session manager.
     this.virtualToolExecutor = new VirtualToolExecutor(
       this.capabilityRegistry, this.sessionManager,
@@ -190,6 +197,7 @@ export class Gateway {
       storage: this.storage,
       virtualToolRepo: this.storage.virtualTools,
       virtualToolExecutor: this.virtualToolExecutor,
+      reverseChannel: this.reverseChannel,
     });
     this.app.route(mcpPath, mcpRoutes);
 

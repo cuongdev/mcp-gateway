@@ -12,6 +12,7 @@
 // ============================================================
 
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { v4 as uuidv4 } from "uuid";
 import type { GatewayVariables } from "../middleware/types.js";
 import type { GatewayContext } from "../types/gateway.js";
@@ -44,6 +45,8 @@ function hashShort(s: string): string {
 import type { VirtualToolRepo, VirtualToolRow } from "../storage/repositories/virtual-tool.repo.js";
 import type { VirtualToolExecutor } from "../virtual-tools/executor.js";
 import type { VirtualToolPlan } from "../virtual-tools/types.js";
+import type { ReverseChannelMux } from "../pipeline/reverse-channel.js";
+import { HonoSseWriter } from "../transport/sse-writer.js";
 
 /** Map a RegisteredTool to the MCP-protocol tool shape. */
 function toMCPTool(r: RegisteredTool): MCPTool {
@@ -108,6 +111,8 @@ interface MCPRouteDeps {
   /** P10 — when present, tools/list adds virtual tools and tools/call delegates. */
   virtualToolRepo?: VirtualToolRepo;
   virtualToolExecutor?: VirtualToolExecutor;
+  /** v0.9 — when present, GET /mcp upgrades to SSE and registers the client channel. */
+  reverseChannel?: ReverseChannelMux;
 }
 
 /**
@@ -151,9 +156,45 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
 
   // ── GET /mcp — SSE endpoint for server-initiated messages
   app.get("/", async (c) => {
-    // Streamable HTTP: server→client notifications via SSE
-    // For now return a placeholder; full SSE impl requires streaming support
-    return c.text("SSE endpoint — connect via POST for requests", 200);
+    const mux = deps.reverseChannel;
+    if (!mux) {
+      // No reverse-channel mux wired — keep v0.8 placeholder behaviour.
+      return c.text("SSE endpoint — connect via POST for requests", 200);
+    }
+
+    // Honour the client's Mcp-Session-Id if supplied, otherwise mint one.
+    const sessionId = c.req.header("mcp-session-id") ?? uuidv4();
+    c.header("Mcp-Session-Id", sessionId);
+
+    return streamSSE(c, async (stream) => {
+      const writer = new HonoSseWriter(stream, (err) => {
+        log.debug({ err, sessionId }, "SSE write error");
+      });
+      const unregister = mux.registerClient(sessionId, writer);
+
+      // 30s heartbeat keeps proxies / load balancers from closing the
+      // idle stream. We treat every successful write as an aliveness
+      // signal; a write failure latches `writer.closed = true` which
+      // breaks the loop on the next tick.
+      const heartbeatTimer = setInterval(() => {
+        if (writer.closed) return;
+        writer.send({ type: "heartbeat", ts: Date.now() });
+      }, 30_000);
+      // Don't hold the event loop open just for the heartbeat.
+      heartbeatTimer.unref?.();
+
+      // Stay alive until the stream aborts. Hono fires `onAbort` when
+      // the underlying Response is cancelled (client disconnects), and
+      // sets `aborted = true` if it already fired before we attach.
+      await new Promise<void>((resolve) => {
+        if (stream.aborted || stream.closed) return resolve();
+        stream.onAbort(() => resolve());
+      });
+
+      clearInterval(heartbeatTimer);
+      unregister();
+      writer.close();
+    });
   });
 
   // ── DELETE /mcp — Close MCP session
