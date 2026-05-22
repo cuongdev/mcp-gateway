@@ -179,6 +179,7 @@ export class Gateway {
       toolGroups: this.toolGroups,
       sessionManager: this.sessionManager,
       promptRegistry: this.promptRegistry,
+      resourceRegistry: this.resourceRegistry,
       redactionFactory: this.redactionFactory,
       storage: this.storage,
     });
