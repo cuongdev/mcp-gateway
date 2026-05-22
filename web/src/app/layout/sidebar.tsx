@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  Home, Server, Wrench, LayoutGrid, MessageSquare, Network, Boxes as PackageIcon, FolderTree,
+  Home, Server, Wrench, LayoutGrid, MessageSquare, Network, Boxes as PackageIcon, FolderTree, Workflow,
   Users, Bot, Key, ShieldCheck, Lock,
   Gauge, Database, Boxes, BadgeCheck, Zap, ShieldAlert,
   BarChart3, ScrollText, Activity, HeartPulse,
@@ -27,6 +27,7 @@ const groups: Group[] = [
       { to: '/tools', label: 'Tools', icon: Wrench },
       { to: '/groups', label: 'Tool Groups', icon: LayoutGrid },
       { to: '/resources', label: 'Resources', icon: FolderTree },
+      { to: '/virtual-tools', label: 'Virtual Tools', icon: Workflow },
       { to: '/prompts', label: 'Prompts', icon: MessageSquare },
       { to: '/proxies', label: 'Proxies', icon: Network, gated: (me) => me?.roles.includes('admin') ?? false },
     ],
