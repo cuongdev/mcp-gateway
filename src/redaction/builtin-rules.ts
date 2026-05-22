@@ -158,7 +158,8 @@ export const BUILTIN_RULES: ReadonlyArray<RawRule> = [
     id: 'pii_phone_us',
     name: 'US Phone Number',
     kind: 'pii.phone_us',
-    pattern: '\\b(?:\\+?1[\\s\\-.]?)?\\(?\\d{3}\\)?[\\s\\-.]?\\d{3}[\\s\\-.]?\\d{4}\\b',
+    // Two safe alternatives joined: grouped digits with [ .-] separator, or "(NNN) NNN-NNNN".
+    pattern: '(?:\\b\\d{3}[ .-]\\d{3}[ .-]\\d{4}\\b)|(?:\\(\\d{3}\\)\\s?\\d{3}[ .-]?\\d{4})',
     mode: 'warn',
     scopeRequest: true,
     scopeResponse: true,
@@ -185,9 +186,9 @@ export const BUILTIN_RULES: ReadonlyArray<RawRule> = [
     id: 'pii_credit_card',
     name: 'Credit Card (Luhn-validated)',
     kind: 'pii.credit_card',
-    // 13-19 digits in 1-4 groups separated by space/dash. Pure digit/separator
-    // class — no nested quantifiers — so safe-regex passes.
-    pattern: '\\b(?:\\d[ -]?){12,18}\\d\\b',
+    // 16-digit cards in 4 groups (space/dash/no-sep) OR a flat 13-19 digit run.
+    // Two safe alternatives — no nested quantifiers.
+    pattern: '(?:\\b\\d{4}[ -]?\\d{4}[ -]?\\d{4}[ -]?\\d{1,7}\\b)|(?:\\b\\d{13,19}\\b)',
     mode: 'block',
     scopeRequest: true,
     scopeResponse: true,

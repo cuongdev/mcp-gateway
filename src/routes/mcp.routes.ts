@@ -31,6 +31,10 @@ import type { SessionManager } from "../session/session.manager.js";
 import { withSpan } from "../observability/spans.js";
 import { toolCallDuration } from "../middleware/monitoring/metrics.middleware.js";
 import { logger } from "../utils/logger.js";
+import type { RedactionEngineFactory } from "../redaction/factory.js";
+import type { StorageAdapter } from "../storage/adapter.js";
+import { RedactionBlock } from "../redaction/types.js";
+import { newId } from "../utils/uuid.js";
 
 /** Map a RegisteredTool to the MCP-protocol tool shape. */
 function toMCPTool(r: RegisteredTool): MCPTool {
@@ -69,6 +73,11 @@ interface MCPRouteDeps {
   toolGroups: ToolGroupManager;
   sessionManager: SessionManager;
   promptRegistry: PromptRegistry;
+  /** Optional — for resources/list, /read, /templates/list (P8). */
+  resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry;
+  /** Optional — when present, /mcp tools/call applies redaction on request + response. */
+  redactionFactory?: RedactionEngineFactory;
+  storage?: StorageAdapter;
 }
 
 /**
@@ -78,6 +87,8 @@ interface MCPRouteDeps {
 export function createMCPRoutes(deps: MCPRouteDeps) {
   const app = new Hono<{ Variables: GatewayVariables }>();
   const { toolRegistry, toolGroups, sessionManager, promptRegistry } = deps;
+  const redactionFactory = deps.redactionFactory;
+  const storage = deps.storage;
 
   // ── POST /mcp — Main MCP endpoint (all tools) ───────
   app.post("/", async (c) => {
@@ -96,7 +107,10 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       toolGroups,
       sessionManager,
       promptRegistry,
-      undefined // no group filter
+      undefined, // no group filter
+      redactionFactory,
+      storage,
+      deps.resourceRegistry,
     );
 
     // Set MCP session header
@@ -156,7 +170,10 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       toolGroups,
       sessionManager,
       promptRegistry,
-      groupName
+      groupName,
+      redactionFactory,
+      storage,
+      deps.resourceRegistry,
     );
 
     c.header("Mcp-Session-Id", ctx?.requestId ?? uuidv4());
@@ -175,7 +192,10 @@ async function handleMCPRequest(
   groups: ToolGroupManager,
   sessionManager: SessionManager,
   promptRegistry: PromptRegistry,
-  groupName: string | undefined
+  groupName: string | undefined,
+  redactionFactory?: RedactionEngineFactory,
+  storage?: StorageAdapter,
+  resourceRegistry?: import('../registry/resource.registry.js').ResourceRegistry,
 ): Promise<JsonRpcResponse> {
   const { method, params, id } = request;
 
@@ -267,14 +287,68 @@ async function handleMCPRequest(
 
             context.targetServer = resolved.serverName;
 
-            // Rewrite the request with the original tool name
+            // ── Redaction: scan request arguments ───────
+            let scannedArguments = params?.arguments;
+            const requestId = (context?.requestId as string | undefined) ?? newId();
+            const principalId = ((context as { user?: { id?: string } })?.user?.id) ?? null;
+            if (redactionFactory && scannedArguments !== undefined) {
+              try {
+                const engine = await redactionFactory.getEngine('tnt_default');
+                const scan = engine.scan(scannedArguments, 'request');
+                scannedArguments = scan.value;
+                if (scan.findings.length > 0 && storage) {
+                  await storage.redactionFindings.recordMany(
+                    scan.findings.map((f) => ({
+                      id: `rfd_${newId().slice(4)}`,
+                      ruleId: f.ruleId,
+                      requestId,
+                      capabilityName: canonicalName,
+                      capabilityKind: 'tool',
+                      serverName: resolved.serverName,
+                      scope: 'request',
+                      mode: f.mode,
+                      matchCount: f.count,
+                      principalId,
+                    })),
+                  ).catch((err) => log.warn({ err }, 'failed to record redaction findings'));
+                }
+              } catch (err) {
+                if (err instanceof RedactionBlock) {
+                  toolCallDuration.observe({ tool: canonicalName, result: "error" }, (Date.now() - toolStart) / 1000);
+                  // Record the block as a finding before returning the error.
+                  if (storage) {
+                    storage.redactionFindings.recordMany([{
+                      id: `rfd_${newId().slice(4)}`,
+                      ruleId: err.rule.id,
+                      requestId,
+                      capabilityName: canonicalName,
+                      capabilityKind: 'tool',
+                      serverName: resolved.serverName,
+                      scope: 'request',
+                      mode: 'block',
+                      matchCount: err.count,
+                      principalId,
+                    }]).catch(() => undefined);
+                  }
+                  return createErrorResponse(
+                    id,
+                    -32000,
+                    `Request blocked by redaction rule '${err.rule.name}'`,
+                  );
+                }
+                // Defensive: any other engine failure passes through (don't break user calls).
+                log.warn({ err }, 'redaction request scan failed; passing through');
+              }
+            }
+
+            // Rewrite the request with the original tool name + redacted args
             const upstreamRequest: JsonRpcRequest = {
               jsonrpc: "2.0",
               id,
               method: MCP_METHODS.TOOLS_CALL,
               params: {
                 name: resolved.originalName,
-                arguments: params?.arguments,
+                arguments: scannedArguments,
               },
             };
 
@@ -288,11 +362,61 @@ async function handleMCPRequest(
             );
 
             // Forward via session manager (with optional group proxy ctx)
-            const result = await sessionManager.send(
+            let result = await sessionManager.send(
               resolved.serverName,
               upstreamRequest,
               sendOpts,
             );
+
+            // ── Redaction: scan response content ────────
+            if (redactionFactory && result && typeof result === 'object' && 'result' in result) {
+              try {
+                const engine = await redactionFactory.getEngine('tnt_default');
+                const scan = engine.scan((result as { result: unknown }).result, 'response');
+                (result as { result: unknown }).result = scan.value;
+                if (scan.findings.length > 0 && storage) {
+                  await storage.redactionFindings.recordMany(
+                    scan.findings.map((f) => ({
+                      id: `rfd_${newId().slice(4)}`,
+                      ruleId: f.ruleId,
+                      requestId,
+                      capabilityName: canonicalName,
+                      capabilityKind: 'tool',
+                      serverName: resolved.serverName,
+                      scope: 'response',
+                      mode: f.mode,
+                      matchCount: f.count,
+                      principalId,
+                    })),
+                  ).catch((err) => log.warn({ err }, 'failed to record redaction findings'));
+                }
+              } catch (err) {
+                if (err instanceof RedactionBlock) {
+                  if (storage) {
+                    storage.redactionFindings.recordMany([{
+                      id: `rfd_${newId().slice(4)}`,
+                      ruleId: err.rule.id,
+                      requestId,
+                      capabilityName: canonicalName,
+                      capabilityKind: 'tool',
+                      serverName: resolved.serverName,
+                      scope: 'response',
+                      mode: 'block',
+                      matchCount: err.count,
+                      principalId,
+                    }]).catch(() => undefined);
+                  }
+                  toolCallDuration.observe({ tool: canonicalName, result: "error" }, (Date.now() - toolStart) / 1000);
+                  return createErrorResponse(
+                    id,
+                    -32000,
+                    `Response blocked by redaction rule '${err.rule.name}'`,
+                  );
+                }
+                log.warn({ err }, 'redaction response scan failed; passing through');
+              }
+            }
+
             toolCallDuration.observe({ tool: canonicalName, result: "success" }, (Date.now() - toolStart) / 1000);
             return result;
           } catch (err) {
@@ -303,15 +427,111 @@ async function handleMCPRequest(
       );
     }
 
-    // ── Resources (pass-through to default server) ───
-    case MCP_METHODS.RESOURCES_LIST:
+    // ── Resources (P8) ──────────────────────────────
+    case MCP_METHODS.RESOURCES_LIST: {
+      if (!resourceRegistry) return createSuccessResponse(id, { resources: [] });
+      const resources = resourceRegistry.list()
+        .filter((r) => r.enabled)
+        .map((r) => ({
+          uri: r.uri,
+          name: r.name || r.canonicalName,
+          description: r.description || undefined,
+          mimeType: r.mimeType,
+        }));
+      return createSuccessResponse(id, { resources });
+    }
+
+    case MCP_METHODS.RESOURCES_TEMPLATES_LIST: {
+      if (!resourceRegistry) return createSuccessResponse(id, { resourceTemplates: [] });
+      const resourceTemplates = resourceRegistry.listTemplates().map((t) => ({
+        uriTemplate: t.uriTemplate,
+        name: t.name ?? undefined,
+        description: t.description ?? undefined,
+        mimeType: t.mimeType ?? undefined,
+      }));
+      return createSuccessResponse(id, { resourceTemplates });
+    }
+
     case MCP_METHODS.RESOURCES_READ: {
-      // Pass to first available server
-      const servers = listKnownServers(registry);
-      if (servers.length === 0) {
-        return createSuccessResponse(id, { resources: [] });
+      const uri = params?.uri as string | undefined;
+      if (!uri) {
+        return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing 'uri' param");
       }
-      return sessionManager.send(servers[0], request, sendOpts);
+      // Find which server owns this URI
+      let serverName: string | undefined;
+      if (resourceRegistry) {
+        const match = resourceRegistry.list().find((r) => r.uri === uri && r.enabled);
+        if (match) serverName = match.serverName;
+      }
+      if (!serverName) {
+        // Fallback: try first server (may match URI template-style)
+        const servers = listKnownServers(registry);
+        if (servers.length === 0) {
+          return createErrorResponse(id, MCP_ERROR_CODES.METHOD_NOT_FOUND, `Resource '${uri}' not registered`);
+        }
+        serverName = servers[0];
+      }
+      return sessionManager.send(serverName, request, sendOpts);
+    }
+
+    case MCP_METHODS.RESOURCES_SUBSCRIBE:
+    case MCP_METHODS.RESOURCES_UNSUBSCRIBE: {
+      // Forward to the server owning the URI (v1: no client re-publish)
+      const uri = params?.uri as string | undefined;
+      if (!uri) return createErrorResponse(id, MCP_ERROR_CODES.INVALID_PARAMS, "Missing 'uri' param");
+      let serverName: string | undefined;
+      if (resourceRegistry) {
+        const match = resourceRegistry.list().find((r) => r.uri === uri && r.enabled);
+        if (match) serverName = match.serverName;
+      }
+      if (!serverName) {
+        const servers = listKnownServers(registry);
+        if (servers.length === 0) {
+          return createErrorResponse(id, MCP_ERROR_CODES.METHOD_NOT_FOUND, `Resource '${uri}' not registered`);
+        }
+        serverName = servers[0];
+      }
+      return sessionManager.send(serverName, request, sendOpts);
+    }
+
+    case MCP_METHODS.COMPLETION: {
+      // completion/complete — params.ref identifies the prompt or resource being completed
+      const ref = (params as Record<string, unknown> | undefined)?.ref as { type?: string; name?: string; uri?: string } | undefined;
+      let serverName: string | undefined;
+      if (ref?.type === 'ref/prompt' && ref.name) {
+        const p = promptRegistry.get(ref.name);
+        if (p) serverName = p.serverName;
+      } else if (ref?.type === 'ref/resource' && ref.uri && resourceRegistry) {
+        const match = resourceRegistry.list().find((r) => r.uri === ref.uri);
+        if (match) serverName = match.serverName;
+      }
+      if (!serverName) {
+        const servers = listKnownServers(registry);
+        if (servers.length === 0) {
+          return createSuccessResponse(id, { completion: { values: [], total: 0, hasMore: false } });
+        }
+        serverName = servers[0];
+      }
+      return sessionManager.send(serverName, request, sendOpts);
+    }
+
+    case MCP_METHODS.LOG_SET_LEVEL: {
+      // Broadcast to all known servers (best-effort)
+      const servers = listKnownServers(registry);
+      const results = await Promise.allSettled(
+        servers.map((s) => sessionManager.send(s, request, sendOpts)),
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed === servers.length && servers.length > 0) {
+        return createErrorResponse(id, MCP_ERROR_CODES.INTERNAL_ERROR, "All upstreams rejected logging/setLevel");
+      }
+      return createSuccessResponse(id, {});
+    }
+
+    case MCP_METHODS.ROOTS_LIST: {
+      // In v1 the gateway returns its own roots view (admin-managed),
+      // not a fan-out reverse channel to clients. Empty list is spec-valid.
+      return createSuccessResponse(id, { roots: [] });
     }
 
     // ── Prompts ──────────────────────────────────────

@@ -24,6 +24,8 @@ import { registerWebhookCommand } from './commands/webhook.js';
 import { registerTenantCommand } from './commands/tenant.js';
 import { registerProxyCommand } from './commands/proxy.js';
 import { registerCircuitCommand } from './commands/circuit.js';
+import { registerRedactionCommand } from './commands/redaction.js';
+import { registerCatalogCommand } from './commands/catalog.js';
 
 async function main() {
   const program = new Command();
@@ -57,6 +59,8 @@ async function main() {
   registerTenantCommand(program);
   registerProxyCommand(program);
   registerCircuitCommand(program);
+  registerRedactionCommand(program);
+  registerCatalogCommand(program);
 
   await program.parseAsync(process.argv);
 }

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { StorageAdapter } from '../../storage/adapter.js';
 import { newId } from '../../utils/uuid.js';
+import { seedBuiltinRedactionRules } from '../../redaction/seed.js';
 
 export interface TenantsRoutesDeps {
   storage: StorageAdapter;
@@ -33,6 +34,8 @@ export function createTenantsRoutes(deps: TenantsRoutesDeps) {
         id, slug: body.slug, displayName: body.displayName,
         plan: body.plan, metadata: body.metadata,
       });
+      // Seed built-in redaction rules for the new tenant (idempotent).
+      await seedBuiltinRedactionRules(deps.storage, tenant.id);
       return c.json(tenant, 201);
     } catch (err) {
       const msg = (err as Error).message;
