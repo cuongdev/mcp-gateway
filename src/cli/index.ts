@@ -26,6 +26,7 @@ import { registerProxyCommand } from './commands/proxy.js';
 import { registerCircuitCommand } from './commands/circuit.js';
 import { registerRedactionCommand } from './commands/redaction.js';
 import { registerCatalogCommand } from './commands/catalog.js';
+import { registerVirtualToolCommand } from './commands/virtual-tool.js';
 
 async function main() {
   const program = new Command();
@@ -61,6 +62,7 @@ async function main() {
   registerCircuitCommand(program);
   registerRedactionCommand(program);
   registerCatalogCommand(program);
+  registerVirtualToolCommand(program);
 
   await program.parseAsync(process.argv);
 }
