@@ -61,6 +61,8 @@ const RedactionPage = lazy(() => import('@/features/redaction/page').then((m) =>
 
 const CatalogPage = lazy(() => import('@/features/catalog/page').then((m) => ({ default: m.CatalogPage })));
 
+const ResourcesPage = lazy(() => import('@/features/resources/page').then((m) => ({ default: m.ResourcesPage })));
+
 function RouteSuspenseFallback() {
   return (
     <div className="flex h-full items-center justify-center py-24">
@@ -81,6 +83,7 @@ export function App() {
                 <Route index element={<Navigate to="/overview" replace />} />
                 <Route path="/overview" element={<OverviewPage />} />
                 <Route path="/catalog" element={<CatalogPage />} />
+                <Route path="/resources" element={<ResourcesPage />} />
                 {/* ROUTING */}
                 <Route path="/servers" element={<ServersPage />}>
                   <Route path="new" element={<ServerNewSheet />} />
