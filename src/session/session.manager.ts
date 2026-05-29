@@ -204,6 +204,22 @@ export class SessionManager {
   private reverseChannel?: ReverseChannelMux;
 
   /**
+   * Optional reverse-channel redactor (v0.10, gated by
+   * `gateway.reverseChannelRedaction`). When set, BOTH legs of a reverse
+   * call are scrubbed: the upstream's reverse request (`scope: 'request'`)
+   * before it reaches the client, and the client's response
+   * (`scope: 'response'`) before it reaches the upstream. Returns the
+   * redacted value, or `blocked` when a block-mode rule matched (the call
+   * is then refused with a JSON-RPC error). A thin function shape keeps
+   * SessionManager decoupled from the redaction engine + findings store.
+   */
+  private reverseRedactor?: (
+    value: unknown,
+    scope: 'request' | 'response',
+    meta: { method: string; serverName: string; requestId: string; clientSessionId: string },
+  ) => Promise<{ value: unknown; blocked?: { ruleName: string } }>;
+
+  /**
    * Optional sampling-log recorder (v0.9). When set, every successful
    * mux round-trip is recorded with `outcome: 'success'`. We accept a
    * thin function shape rather than the full repo so tests can stub it.
@@ -294,6 +310,17 @@ export class SessionManager {
   }
 
   /**
+   * Wire a reverse-channel redactor (v0.10, gated by
+   * `gateway.reverseChannelRedaction`). Optional — when unset, reverse-call
+   * payloads are forwarded without redaction (the pre-v0.10 behaviour).
+   */
+  setReverseRedactor(
+    fn: SessionManager['reverseRedactor'] | undefined,
+  ): void {
+    this.reverseRedactor = fn;
+  }
+
+  /**
    * v0.9 reverse-channel inbound from an STDIO upstream. Forwards the
    * JSON-RPC request to the originating client (identified via
    * `params._meta.session_id` injected by `send()`) and writes the
@@ -303,8 +330,10 @@ export class SessionManager {
    * Failures are reported back to the upstream as a JSON-RPC error
    * response so the upstream isn't left waiting forever.
    *
-   * TODO(v0.10): apply RedactRequest + RedactResponse interceptors on
-   * BOTH legs of the reverse call (currently no redaction is applied).
+   * When a `reverseRedactor` is wired (gateway.reverseChannelRedaction),
+   * both legs are scrubbed: the upstream's reverse request before it
+   * reaches the client, and the client's response before it reaches the
+   * upstream. A block-mode match on either leg refuses the call.
    */
   private async handleUpstreamReverseRequest(
     serverName: string,
@@ -381,7 +410,25 @@ export class SessionManager {
 
     const started = Date.now();
     try {
-      const response = await mux.forwardFromUpstream(serverName, sessionId, msg);
+      // RedactRequest leg — scrub secrets in the upstream's reverse request
+      // (e.g. a sampling prompt/messages) before it is fanned to the client.
+      let forwardFrame: ReverseRequestShape = msg;
+      if (this.reverseRedactor) {
+        const r = await this.reverseRedactor(params, 'request', {
+          method: msg.method, serverName, requestId, clientSessionId: sessionId,
+        });
+        if (r.blocked) {
+          this.writeStdioResponse(session, {
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32000, message: `Reverse request blocked by redaction rule '${r.blocked.ruleName}'` },
+          });
+          await record('error', { latencyMs: Date.now() - started });
+          return;
+        }
+        forwardFrame = { ...msg, params: r.value as Record<string, unknown> };
+      }
+      const response = await mux.forwardFromUpstream(serverName, sessionId, forwardFrame);
       // I3: the client's response must resolve the UPSTREAM's own request id.
       // Take only its result/error and force `id` to msg.id — never relay a
       // client-supplied id, which could mismatch and leave the upstream
@@ -401,6 +448,23 @@ export class SessionManager {
         'error' in cr
           ? { jsonrpc: '2.0', id: msg.id, error: cr.error as JsonRpcResponse['error'] }
           : { jsonrpc: '2.0', id: msg.id, result: cr.result };
+      // RedactResponse leg — scrub secrets in the client's model output
+      // before it reaches the upstream.
+      if (this.reverseRedactor && 'result' in relayed) {
+        const r = await this.reverseRedactor(relayed.result, 'response', {
+          method: msg.method, serverName, requestId, clientSessionId: sessionId,
+        });
+        if (r.blocked) {
+          this.writeStdioResponse(session, {
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32000, message: `Reverse response blocked by redaction rule '${r.blocked.ruleName}'` },
+          });
+          await record('error', { latencyMs: Date.now() - started });
+          return;
+        }
+        relayed.result = r.value;
+      }
       this.writeStdioResponse(session, relayed);
       await record('success', {
         responsePayloadHash: hashShort(JSON.stringify(relayed)),

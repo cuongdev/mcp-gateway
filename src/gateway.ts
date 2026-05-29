@@ -69,6 +69,7 @@ import { createProxiesRoutes } from "./routes/admin/proxies.routes.js";
 import { ProxyRegistry } from "./proxy/registry.js";
 import { bootstrapFromConfig } from "./storage/bootstrap.js";
 import { RedactionEngineFactory } from "./redaction/factory.js";
+import { RedactionBlock } from "./redaction/types.js";
 import { seedAllTenants } from "./redaction/seed.js";
 import { ReverseChannelMux } from "./pipeline/reverse-channel.js";
 import { newId } from "./utils/uuid.js";
@@ -206,6 +207,59 @@ export class Gateway {
 
     // Redaction factory wired up-front so both MCP and admin routes can use it.
     this.redactionFactory = new RedactionEngineFactory(this.storage);
+
+    // v0.10 — apply redaction on both legs of a reverse-channel call when
+    // `gateway.reverseChannelRedaction` is enabled. Thin closure mirrors the
+    // forward tools/call redaction: scan, record findings, and signal a
+    // block-mode match back to the SessionManager (which refuses the call).
+    if (this.config.gateway.reverseChannelRedaction) {
+      const factory = this.redactionFactory;
+      const storage = this.storage;
+      this.sessionManager.setReverseRedactor(async (value, scope, meta) => {
+        try {
+          const engine = await factory.getEngine('tnt_default');
+          const scan = engine.scan(value, scope);
+          if (scan.findings.length > 0) {
+            await storage.redactionFindings.recordMany(
+              scan.findings.map((f) => ({
+                id: `rfd_${newId().slice(4)}`,
+                ruleId: f.ruleId,
+                requestId: meta.requestId,
+                capabilityName: meta.method,
+                capabilityKind: 'sampling',
+                serverName: meta.serverName,
+                scope,
+                mode: f.mode,
+                matchCount: f.count,
+                principalId: null,
+              })),
+            ).catch(() => undefined);
+          }
+          return { value: scan.value };
+        } catch (err) {
+          if (err instanceof RedactionBlock) {
+            await storage.redactionFindings.recordMany([{
+              id: `rfd_${newId().slice(4)}`,
+              ruleId: err.rule.id,
+              requestId: meta.requestId,
+              capabilityName: meta.method,
+              capabilityKind: 'sampling',
+              serverName: meta.serverName,
+              scope,
+              mode: 'block',
+              matchCount: err.count,
+              principalId: null,
+            }]).catch(() => undefined);
+            return { value, blocked: { ruleName: err.rule.name } };
+          }
+          // Defensive: any other engine failure passes through un-redacted
+          // rather than breaking the reverse call.
+          log.warn({ err }, 'reverse-channel redaction scan failed; passing through');
+          return { value };
+        }
+      });
+      log.info('Reverse-channel redaction ENABLED (both legs)');
+    }
 
     // ── MCP Routes (for AI agents / MCP clients) ─────
     const mcpRoutes = createMCPRoutes({

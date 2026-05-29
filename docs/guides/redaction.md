@@ -60,3 +60,21 @@ In `mcp.routes.ts`:
 4. On `warn` match: pass-through.
 5. Response comes back → scan `result.content` blocks the same way.
 6. Findings persisted (no leaked text).
+
+## Reverse-channel redaction (v0.10)
+
+Reverse-channel calls — an upstream-initiated `sampling/createMessage` fanned
+back to the originating client over SSE — carry prompts/messages one way and
+the client's model output the other. Both legs are scrubbed with the same rule
+set when enabled:
+
+```yaml
+gateway:
+  reverseChannelRedaction: true   # default: false
+```
+
+- **Request leg** (`scope: 'request'`): the upstream's reverse request is scanned before it reaches the client.
+- **Response leg** (`scope: 'response'`): the client's response is scanned before it reaches the upstream.
+- A `block`-mode match on either leg refuses the reverse call with JSON-RPC error `-32000`; findings are persisted with `capabilityKind: 'sampling'`.
+- Off by default (opt in once rules are tuned). Harmless when no rules are configured — the scan is a no-op.
+

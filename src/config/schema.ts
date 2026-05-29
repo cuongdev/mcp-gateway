@@ -345,6 +345,14 @@ export const GatewayConfigSchema = z.object({
     apiPath: z.string().default("/api"),
     corsOrigins: z.array(z.string()).default(["*"]),
     requestTimeout: z.number().positive().default(30000),
+    /**
+     * Apply redaction rules to BOTH legs of a reverse-channel call
+     * (upstream-initiated sampling/createMessage → client, and the client's
+     * response → upstream). Off by default: opt in once redaction rules are
+     * tuned, since a block-mode match will refuse the reverse call. Harmless
+     * when no rules are configured (scan is a no-op).
+     */
+    reverseChannelRedaction: z.boolean().default(false),
   }).default({}),
 
   /**
