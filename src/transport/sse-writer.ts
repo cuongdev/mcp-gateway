@@ -14,8 +14,16 @@
 import type { SSEStreamingApi } from 'hono/streaming';
 
 export interface SseWriter {
-  /** Serialise `json` and emit a single `data: <json>\n\n` frame. */
-  send(json: unknown): void;
+  /**
+   * Serialise `json` and emit a single SSE frame.
+   *
+   * `opts.event` sets the SSE `event:` field so a client can route frames
+   * without inspecting their JSON body. Reverse JSON-RPC frames use the
+   * default `message` event (delivered to `EventSource.onmessage`);
+   * keep-alive heartbeats use a distinct event so they're never confused
+   * with a real reverse request.
+   */
+  send(json: unknown, opts?: { event?: string }): void;
   /** Mark the channel closed. Subsequent `send()` calls become no-ops. */
   close(): void;
   /** True once `close()` has been called or the underlying stream ended. */
@@ -44,7 +52,7 @@ export class HonoSseWriter implements SseWriter {
     return this._closed;
   }
 
-  send(json: unknown): void {
+  send(json: unknown, opts?: { event?: string }): void {
     if (this._closed) return;
     let payload: string;
     try {
@@ -57,7 +65,8 @@ export class HonoSseWriter implements SseWriter {
     // Hono's writeSSE returns a Promise; we don't await because send()
     // is sync by contract. Any rejection latches the writer closed so
     // the mux's pendingCountFor reflects reality.
-    this.stream.writeSSE({ data: payload }).catch((err) => {
+    const frame = opts?.event ? { event: opts.event, data: payload } : { data: payload };
+    this.stream.writeSSE(frame).catch((err) => {
       this._closed = true;
       this.onError?.(err);
     });

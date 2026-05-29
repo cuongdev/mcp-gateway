@@ -112,10 +112,19 @@ interface ReverseRequestShape {
   params?: Record<string, unknown>;
 }
 
-/** Method names that the reverse channel will forward back to the client. */
+/**
+ * Method names the reverse channel fans out to the originating client.
+ *
+ * `roots/list` is deliberately NOT here: in v1 the gateway answers
+ * `roots/list` with its own admin-managed view (see
+ * `handleUpstreamReverseRequest` and the `roots/list` handler in
+ * mcp.routes), rather than fanning a single client's filesystem roots
+ * back to an upstream. Keeping both behaviours consistent avoids the
+ * gateway returning an admin view in one direction and a client view
+ * in the other.
+ */
 const REVERSE_FORWARDABLE_METHODS = new Set<string>([
   'sampling/createMessage',
-  'roots/list',
 ]);
 
 /** Short SHA-256 hash (first 16 hex chars) — duplicated from mcp.routes for sampling-log hashes. */
@@ -305,7 +314,38 @@ export class SessionManager {
     const mux = this.reverseChannel;
     const requestId = String(msg.id);
 
-    // Only forward known methods.
+    // Pull the originating client session id from _meta up front so every
+    // outcome (including early rejections) can be recorded against it.
+    const params = msg.params ?? {};
+    const meta = (params._meta as { session_id?: unknown } | undefined);
+    const sessionId = typeof meta?.session_id === 'string' ? meta.session_id : null;
+    const reqHash = hashShort(JSON.stringify(msg));
+
+    // I5: a single recorder so NO branch silently skips the sampling_log.
+    const record = (
+      outcome: 'success' | 'client_refused' | 'timeout' | 'error' | 'method_not_supported',
+      extra?: { responsePayloadHash?: string | null; latencyMs?: number | null },
+    ): Promise<void> =>
+      this.samplingRecord?.({
+        requestId,
+        upstreamServer: serverName,
+        clientSessionId: sessionId ?? 'unknown',
+        method: msg.method,
+        requestPayloadHash: reqHash,
+        ...extra,
+        outcome,
+      }).catch(() => undefined) ?? Promise.resolve();
+
+    // I1: roots/list is answered by the gateway's own admin-managed view in
+    // v1 — never fanned out to a client (matches the POST /mcp roots/list
+    // handler). An empty list is spec-valid.
+    if (msg.method === 'roots/list') {
+      this.writeStdioResponse(session, { jsonrpc: '2.0', id: msg.id, result: { roots: [] } });
+      await record('success');
+      return;
+    }
+
+    // Only forward known reverse methods.
     if (!REVERSE_FORWARDABLE_METHODS.has(msg.method)) {
       log.warn({ server: serverName, method: msg.method }, 'unknown upstream reverse method');
       this.writeStdioResponse(session, {
@@ -313,6 +353,7 @@ export class SessionManager {
         id: msg.id,
         error: { code: -32601, message: `Method not found: ${msg.method}` },
       });
+      await record('method_not_supported');
       return;
     }
 
@@ -323,13 +364,10 @@ export class SessionManager {
         id: msg.id,
         error: { code: -32603, message: 'reverse channel not available' },
       });
+      await record('error');
       return;
     }
 
-    // Pull the originating client session id from _meta.
-    const params = msg.params ?? {};
-    const meta = (params._meta as { session_id?: unknown } | undefined);
-    const sessionId = typeof meta?.session_id === 'string' ? meta.session_id : null;
     if (!sessionId) {
       log.warn({ server: serverName, method: msg.method }, 'reverse rpc missing _meta.session_id; rejecting');
       this.writeStdioResponse(session, {
@@ -337,33 +375,37 @@ export class SessionManager {
         id: msg.id,
         error: { code: -32602, message: 'missing _meta.session_id' },
       });
-      await this.samplingRecord?.({
-        requestId,
-        upstreamServer: serverName,
-        clientSessionId: 'unknown',
-        method: msg.method,
-        requestPayloadHash: hashShort(JSON.stringify(msg)),
-        outcome: 'error',
-      }).catch(() => undefined);
+      await record('error');
       return;
     }
 
     const started = Date.now();
     try {
       const response = await mux.forwardFromUpstream(serverName, sessionId, msg);
-      // Relay the client's response (which IS a JsonRpcResponse) verbatim
-      // back to the upstream over stdin so its `id`-matched promise resolves.
-      this.writeStdioResponse(session, response as JsonRpcResponse);
-      await this.samplingRecord?.({
-        requestId,
-        upstreamServer: serverName,
-        clientSessionId: sessionId,
-        method: msg.method,
-        requestPayloadHash: hashShort(JSON.stringify(msg)),
-        responsePayloadHash: hashShort(JSON.stringify(response)),
+      // I3: the client's response must resolve the UPSTREAM's own request id.
+      // Take only its result/error and force `id` to msg.id — never relay a
+      // client-supplied id, which could mismatch and leave the upstream
+      // waiting forever. A response carrying neither result nor error is
+      // malformed and reported back as an internal error.
+      const cr = response as { result?: unknown; error?: unknown } | null;
+      if (!cr || typeof cr !== 'object' || !('result' in cr || 'error' in cr)) {
+        this.writeStdioResponse(session, {
+          jsonrpc: '2.0',
+          id: msg.id,
+          error: { code: -32603, message: 'malformed client response' },
+        });
+        await record('error', { latencyMs: Date.now() - started });
+        return;
+      }
+      const relayed: JsonRpcResponse =
+        'error' in cr
+          ? { jsonrpc: '2.0', id: msg.id, error: cr.error as JsonRpcResponse['error'] }
+          : { jsonrpc: '2.0', id: msg.id, result: cr.result };
+      this.writeStdioResponse(session, relayed);
+      await record('success', {
+        responsePayloadHash: hashShort(JSON.stringify(relayed)),
         latencyMs: Date.now() - started,
-        outcome: 'success',
-      }).catch(() => undefined);
+      });
     } catch (err) {
       const name = err instanceof Error ? err.name : 'Error';
       const outcome: 'timeout' | 'client_refused' | 'error' =
@@ -378,15 +420,7 @@ export class SessionManager {
           message: err instanceof Error ? err.message : String(err),
         },
       });
-      await this.samplingRecord?.({
-        requestId,
-        upstreamServer: serverName,
-        clientSessionId: sessionId,
-        method: msg.method,
-        requestPayloadHash: hashShort(JSON.stringify(msg)),
-        latencyMs: Date.now() - started,
-        outcome,
-      }).catch(() => undefined);
+      await record(outcome, { latencyMs: Date.now() - started });
     }
   }
 
@@ -1171,30 +1205,52 @@ export class SessionManager {
         try {
           const msg = JSON.parse(trimmed) as Record<string, unknown>;
 
-          // ── JSON-RPC RESPONSE — matches a pending request id ──
-          if ("id" in msg && msg.id != null && !("method" in msg)) {
+          // Classify strictly by JSON-RPC message *kind*, not by a heuristic.
+          // The gateway's outbound request ids and an upstream's own request
+          // ids are independent namespaces; we never disambiguate by id
+          // value alone. A frame carrying `method` is a request/notification;
+          // a frame carrying `result`/`error` (and no `method`) is a response.
+          const hasMethod = typeof msg.method === 'string';
+          const hasId = 'id' in msg && msg.id != null;
+          const isResponseFrame = !hasMethod && hasId && ('result' in msg || 'error' in msg);
+
+          // ── JSON-RPC RESPONSE — resolve the matching pending request ──
+          if (isResponseFrame) {
             const pending = session.pending.get(msg.id as string | number);
             if (pending) {
               clearTimeout(pending.timer);
               session.pending.delete(msg.id as string | number);
               pending.resolve(msg as unknown as JsonRpcResponse);
-              continue;
+            } else {
+              // No outstanding gateway request for this id — duplicate or
+              // late delivery. Drop it rather than mis-routing.
+              log.debug({ server: serverName, id: msg.id }, 'orphan JSON-RPC response (no pending request)');
             }
+            continue;
           }
 
-          // ── JSON-RPC REQUEST initiated by the upstream ──
-          // Has `method` field. v0.9 routes `sampling/createMessage`
-          // and `roots/list` back to the originating client through
-          // the reverse-channel mux. Other method-style RPCs are
-          // logged + ignored (no defined gateway behaviour yet).
-          if (typeof msg.method === 'string' && 'id' in msg && msg.id != null) {
+          // ── JSON-RPC REQUEST initiated by the upstream (method + id) ──
+          // v0.9 routes `sampling/createMessage` back to the originating
+          // client through the reverse-channel mux (and answers `roots/list`
+          // with the gateway's admin view). Because request/response are
+          // distinguished by kind above, an upstream request id that happens
+          // to equal a pending gateway id cannot be misread as a response —
+          // but we surface the collision since it signals a misbehaving
+          // upstream reusing the gateway's id space.
+          if (hasMethod && hasId) {
+            if (session.pending.has(msg.id as string | number)) {
+              log.warn(
+                { server: serverName, id: msg.id, method: msg.method },
+                'upstream-initiated request id collides with a pending gateway request id',
+              );
+            }
             this.handleUpstreamReverseRequest(serverName, session, msg as unknown as ReverseRequestShape)
               .catch((err) => log.warn({ err, serverName }, 'reverse-channel handling failed'));
             continue;
           }
 
           // ── Notification (method but no id) ── just log.
-          if (typeof msg.method === 'string') {
+          if (hasMethod) {
             log.debug({ server: serverName, method: msg.method }, 'upstream notification (ignored in v0.9)');
             continue;
           }

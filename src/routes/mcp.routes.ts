@@ -221,7 +221,10 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       // breaks the loop on the next tick.
       const heartbeatTimer = setInterval(() => {
         if (writer.closed) return;
-        writer.send({ type: "heartbeat", ts: Date.now() });
+        // Tagged with a distinct SSE event so the client never mistakes a
+        // keep-alive for a reverse JSON-RPC request (which uses the default
+        // `message` event).
+        writer.send({ ts: Date.now() }, { event: "heartbeat" });
       }, 30_000);
       // Don't hold the event loop open just for the heartbeat.
       heartbeatTimer.unref?.();

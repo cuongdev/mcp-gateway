@@ -7,12 +7,12 @@ import { HonoSseWriter } from '../../../src/transport/sse-writer.js';
  * fields (aborted/closed/onAbort) aren't exercised by the writer.
  */
 function makeFakeStream(opts: { failOnWrite?: boolean } = {}) {
-  const writes: Array<{ data: string }> = [];
-  const writeSSE = vi.fn(async (msg: { data: string | Promise<string> }) => {
+  const writes: Array<{ data: string; event?: string }> = [];
+  const writeSSE = vi.fn(async (msg: { data: string | Promise<string>; event?: string }) => {
     if (opts.failOnWrite) {
       throw new Error('stream broken');
     }
-    writes.push({ data: await msg.data });
+    writes.push({ data: await msg.data, ...(msg.event ? { event: msg.event } : {}) });
   });
   return { writes, writeSSE };
 }
@@ -34,6 +34,23 @@ describe('HonoSseWriter', () => {
       { data: JSON.stringify({ type: 'heartbeat', ts: 42 }) },
     ]);
     expect(writer.closed).toBe(false);
+  });
+
+  it('sets the SSE event field when an event name is supplied', async () => {
+    const stream = makeFakeStream();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const writer = new HonoSseWriter(stream as any);
+
+    // Reverse RPC frame: default (message) event — no event line.
+    writer.send({ jsonrpc: '2.0', id: 1, method: 'sampling/createMessage' });
+    // Heartbeat frame: tagged so the client never confuses it with an RPC.
+    writer.send({ ts: 42 }, { event: 'heartbeat' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(stream.writes).toEqual([
+      { data: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sampling/createMessage' }) },
+      { data: JSON.stringify({ ts: 42 }), event: 'heartbeat' },
+    ]);
   });
 
   it('marks closed on explicit close() and drops subsequent sends', async () => {
