@@ -21,12 +21,18 @@ export function createSystemInfoRoutes(deps: SystemInfoRoutesDeps) {
       return c.json({ error: { code: 'unauthenticated' } }, 401);
     }
     const subject = principal.email ?? principal.id;
-    let isAdmin = false;
-    try {
-      const bindings = await deps.policyEngine.listRoleBindings();
-      isAdmin = bindings.some((b) => b.user === subject && b.role === 'admin');
-    } catch {
-      isAdmin = false;
+    // When authorization is disabled the gateway is "no auth, full access"
+    // (the default local-dev setup): there are no role bindings to check, so
+    // treat the caller as admin rather than 403'ing every admin endpoint.
+    // When authz IS enabled, enforce the admin role binding even in dev mode.
+    let isAdmin = deps.config.authorization.enabled === false;
+    if (!isAdmin) {
+      try {
+        const bindings = await deps.policyEngine.listRoleBindings();
+        isAdmin = bindings.some((b) => b.user === subject && b.role === 'admin');
+      } catch {
+        isAdmin = false;
+      }
     }
     if (!isAdmin) {
       return c.json({ error: { code: 'forbidden', message: 'Admin role required' } }, 403);

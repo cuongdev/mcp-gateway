@@ -400,6 +400,13 @@ export function createAuthRoutes(config: GatewayConfig, deps: AuthRoutesDeps) {
       // surface empty roles rather than crashing /auth/me.
       roles = [];
     }
+    // When authorization is disabled the gateway grants full access — surface
+    // 'admin' so role-gated dashboard UI treats the principal as an
+    // administrator (consistent with the bypass on /api/system/info). When
+    // authz is enabled, report only the real role bindings.
+    if (config.authorization.enabled === false && !roles.includes('admin')) {
+      roles = [...roles, 'admin'];
+    }
     return c.json({
       principalId: principal.id,
       type: principal.type,
