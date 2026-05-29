@@ -10,8 +10,8 @@ function titleFromPath(path: string): string {
 export function Header() {
   const loc = useLocation();
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
-      <div className="text-sm text-muted-foreground">{titleFromPath(loc.pathname)}</div>
+    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="text-sm font-medium text-foreground">{titleFromPath(loc.pathname)}</div>
       <div className="flex items-center gap-2">
         <ThemeToggle />
         <UserMenu />
