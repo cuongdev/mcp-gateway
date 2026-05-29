@@ -94,7 +94,7 @@ export function Sidebar({ onOpenCommandPalette }: { onOpenCommandPalette: () => 
       </div>
       <button
         onClick={onOpenCommandPalette}
-        className="mx-3 mt-3 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
+        className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
       >
         <CommandIcon className="h-3.5 w-3.5" /> <span>Search…</span>
         <kbd className="ml-auto rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono">⌘K</kbd>
@@ -136,8 +136,8 @@ function SidebarItem({ to, label, Icon }: { to: string; label: string; Icon: Luc
       to={to}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-          isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          isActive ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
         )
       }
     >
