@@ -81,6 +81,12 @@ export function createAuditMiddleware(
         metadata: {
           ipAddress: ctx?.metadata.ipAddress as string,
           userAgent: ctx?.metadata.userAgent as string,
+          // Capture the HTTP method + path + status so plain API/dashboard
+          // requests (where there's no MCP method or tool) are distinguishable
+          // in the audit log — and so `resource` can fall back to the path.
+          httpMethod: c.req.method,
+          path: c.req.path,
+          httpStatus: c.res?.status,
         },
       };
 

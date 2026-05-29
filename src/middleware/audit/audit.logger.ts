@@ -47,7 +47,9 @@ export class AuditLogger {
       principalId: entry.userId,
       principalType: entry.userOrg ? "user" : undefined,
       action: entry.action,
-      resource: entry.toolName ?? entry.targetServer,
+      // Tool name / target server for MCP calls; otherwise the request path
+      // so HTTP/dashboard events aren't logged as a bare "GET" with no target.
+      resource: entry.toolName ?? entry.targetServer ?? (entry.metadata?.path as string | undefined),
       result: mapResult(entry.result.status, entry.authorization.decision),
       durationMs: Math.round(entry.result.responseTimeMs),
       metadata: {
