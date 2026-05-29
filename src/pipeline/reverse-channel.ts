@@ -20,11 +20,12 @@
 // a single chatty upstream from exhausting memory. Per-request
 // timeout (default 60s) prevents hung upstream connections.
 //
-// Session-ownership is enforced by the *caller*: the mux just
-// records which session id owns each pending request. The
-// HTTP route that accepts the client's response must compare
-// the `Mcp-Session-Id` header to `pending.sessionId` before
-// calling `resolveFromClient`.
+// Session-ownership is enforced by the mux itself:
+// `resolveFromClient(requestId, callerSessionId, response)` refuses
+// to resolve a pending request unless `callerSessionId` matches the
+// session that owns it. This makes cross-session interception
+// (client B answering client A's reverse request) impossible even
+// if the HTTP route forgets to check — the check is non-bypassable.
 // ============================================================
 
 import type { SseWriter } from '../transport/sse-writer.js';
@@ -202,16 +203,26 @@ export class ReverseChannelMux {
   /**
    * Called by the HTTP route that received the client's response to a
    * previously-forwarded reverse JSON-RPC. Returns `true` if a matching
-   * pending entry was found and resolved, `false` if no match (orphan
-   * response — possibly a duplicate or a too-late delivery).
+   * pending entry was found, owned by `callerSessionId`, and resolved.
+   * Returns `false` if no match (orphan response — duplicate or too-late
+   * delivery) OR if `callerSessionId` is not the session that owns the
+   * pending request.
    *
-   * Session ownership: the calling route MUST verify that the responding
-   * client's session id matches `pending.sessionId`. To make that
-   * comparison cheap we expose `getPendingSessionId(requestId)`.
+   * Session ownership is enforced HERE, not delegated to the caller: a
+   * second client cannot resolve another client's pending reverse request
+   * even by guessing its requestId, because the response is only accepted
+   * from the session the request was forwarded to.
    */
-  resolveFromClient(requestId: string, response: unknown): boolean {
+  resolveFromClient(requestId: string, callerSessionId: string, response: unknown): boolean {
     const entry = this.pending.get(requestId);
     if (!entry) return false;
+    if (entry.sessionId !== callerSessionId) {
+      log.warn(
+        { requestId, callerSessionId, ownerSessionId: entry.sessionId },
+        'reverse response rejected: session mismatch (cross-session interception attempt)',
+      );
+      return false;
+    }
     this.clearPending(requestId);
     entry.resolve(response);
     return true;

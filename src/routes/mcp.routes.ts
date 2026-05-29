@@ -19,6 +19,7 @@ import type { GatewayContext } from "../types/gateway.js";
 import type { JsonRpcRequest, JsonRpcResponse, MCPTool } from "../types/mcp.js";
 import {
   isRequest,
+  isResponse,
   MCP_METHODS,
   createSuccessResponse,
   createErrorResponse,
@@ -98,6 +99,23 @@ function schemaToMCPArguments(
 
 const log = logger.child({ component: "mcp-routes" });
 
+/**
+ * Resolve the stable MCP session id for a request.
+ *
+ * The MCP Streamable HTTP transport assigns a session via the
+ * `Mcp-Session-Id` header: the gateway mints one on `initialize` and the
+ * client echoes it on every subsequent POST and on the GET SSE stream.
+ * That header — NOT the per-request `context.requestId` — is the identity
+ * the reverse channel keys on, so POST `_meta.session_id` injection, GET
+ * channel registration, and client-response intake all agree on one value.
+ */
+function resolveMcpSessionId(
+  c: { req: { header(name: string): string | undefined } },
+  ctx: GatewayContext | undefined,
+): string {
+  return c.req.header("mcp-session-id") ?? ctx?.requestId ?? uuidv4();
+}
+
 interface MCPRouteDeps {
   toolRegistry: ToolRegistry;
   toolGroups: ToolGroupManager;
@@ -128,16 +146,38 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
   // ── POST /mcp — Main MCP endpoint (all tools) ───────
   app.post("/", async (c) => {
     const body = await c.req.json();
+    const ctx = c.get("gatewayCtx");
+    const sessionId = resolveMcpSessionId(c, ctx);
+
+    // v0.9 reverse channel — a JSON-RPC *response* (id, no method) on this
+    // endpoint is the client answering a server-initiated reverse request
+    // (e.g. sampling/createMessage) it received over the GET SSE stream.
+    // Hand it to the mux, which enforces session ownership, then ack 202.
+    if (isResponse(body)) {
+      const mux = deps.reverseChannel;
+      if (mux && body.id != null) {
+        const matched = mux.resolveFromClient(String(body.id), sessionId, body);
+        if (!matched) {
+          log.debug(
+            { sessionId, id: body.id },
+            "reverse response had no matching pending request for this session",
+          );
+        }
+      }
+      c.header("Mcp-Session-Id", sessionId);
+      return c.body(null, 202);
+    }
+
     if (!isRequest(body)) {
       throw new InvalidMessageError("Expected a JSON-RPC 2.0 request");
     }
 
-    const ctx = c.get("gatewayCtx");
     if (ctx) ctx.mcpMessage = body as JsonRpcRequest;
 
     const response = await handleMCPRequest(
       body as JsonRpcRequest,
       ctx,
+      sessionId,
       toolRegistry,
       toolGroups,
       sessionManager,
@@ -149,8 +189,9 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       { virtualToolRepo: deps.virtualToolRepo, virtualToolExecutor: deps.virtualToolExecutor },
     );
 
-    // Set MCP session header
-    c.header("Mcp-Session-Id", ctx?.requestId ?? uuidv4());
+    // Echo the stable MCP session id so the client reuses it on the GET
+    // SSE stream and on subsequent calls.
+    c.header("Mcp-Session-Id", sessionId);
     return c.json(response);
   });
 
@@ -163,7 +204,9 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
     }
 
     // Honour the client's Mcp-Session-Id if supplied, otherwise mint one.
-    const sessionId = c.req.header("mcp-session-id") ?? uuidv4();
+    // Same resolution as POST /mcp so the channel key matches the session id
+    // injected into upstream calls and used for client-response intake.
+    const sessionId = resolveMcpSessionId(c, c.get("gatewayCtx"));
     c.header("Mcp-Session-Id", sessionId);
 
     return streamSSE(c, async (stream) => {
@@ -233,11 +276,13 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
     }
 
     const ctx = c.get("gatewayCtx");
+    const sessionId = resolveMcpSessionId(c, ctx);
     if (ctx) ctx.mcpMessage = body as JsonRpcRequest;
 
     const response = await handleMCPRequest(
       body as JsonRpcRequest,
       ctx,
+      sessionId,
       toolRegistry,
       toolGroups,
       sessionManager,
@@ -249,7 +294,7 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       { virtualToolRepo: deps.virtualToolRepo, virtualToolExecutor: deps.virtualToolExecutor },
     );
 
-    c.header("Mcp-Session-Id", ctx?.requestId ?? uuidv4());
+    c.header("Mcp-Session-Id", sessionId);
     return c.json(response);
   });
 
@@ -266,6 +311,7 @@ interface HandleExtras {
 async function handleMCPRequest(
   request: JsonRpcRequest,
   context: GatewayContext,
+  mcpSessionId: string,
   registry: ToolRegistry,
   groups: ToolGroupManager,
   sessionManager: SessionManager,
@@ -288,9 +334,11 @@ async function handleMCPRequest(
   // upstream call. The session manager injects this as `_meta.session_id`
   // so any reverse RPC the upstream initiates (sampling/createMessage,
   // roots/list, resources/updated) carries the session id back and the
-  // ReverseChannelMux can fan it to the right client.
-  const originatingSessionId =
-    typeof context?.requestId === 'string' ? context.requestId : undefined;
+  // ReverseChannelMux can fan it to the right client. This MUST be the
+  // stable Mcp-Session-Id (shared with the GET SSE channel registration),
+  // not the per-request requestId — otherwise no reverse RPC could ever
+  // match a registered client channel.
+  const originatingSessionId = mcpSessionId;
   const sendOpts:
     | { groupProxyName?: string | null; originatingSessionId?: string }
     | undefined =

@@ -49,7 +49,7 @@ describe('ReverseChannelMux', () => {
 
     // Client replies with a JsonRpcResponse.
     const clientResponse = { jsonrpc: '2.0', id: 'r1', result: { ok: true } };
-    const ok = mux.resolveFromClient('r1', clientResponse);
+    const ok = mux.resolveFromClient('r1', 's1', clientResponse);
     expect(ok).toBe(true);
 
     const resolved = await upstreamPromise;
@@ -60,7 +60,7 @@ describe('ReverseChannelMux', () => {
 
   it('returns false for orphan resolveFromClient (no matching pending)', () => {
     const mux = new ReverseChannelMux();
-    expect(mux.resolveFromClient('does-not-exist', { jsonrpc: '2.0', id: 'x', result: 1 })).toBe(false);
+    expect(mux.resolveFromClient('does-not-exist', 's1', { jsonrpc: '2.0', id: 'x', result: 1 })).toBe(false);
   });
 
   it('exposes the owning session id for a pending request (used to enforce session binding)', async () => {
@@ -69,7 +69,7 @@ describe('ReverseChannelMux', () => {
     mux.registerClient('s1', writer);
     const p = mux.forwardFromUpstream('srv', 's1', baseRpc('rB'));
     expect(mux.getPendingSessionId('rB')).toBe('s1');
-    mux.resolveFromClient('rB', { jsonrpc: '2.0', id: 'rB', result: 'k' });
+    mux.resolveFromClient('rB', 's1', { jsonrpc: '2.0', id: 'rB', result: 'k' });
     await p;
     expect(mux.getPendingSessionId('rB')).toBeUndefined();
   });
@@ -107,13 +107,13 @@ describe('ReverseChannelMux', () => {
     expect(mux.pendingCountFor('s1')).toBe(2);
 
     // Resolve the first to free a slot; a fourth call should now go through.
-    mux.resolveFromClient('1', { jsonrpc: '2.0', id: '1', result: null });
+    mux.resolveFromClient('1', 's1', { jsonrpc: '2.0', id: '1', result: null });
     await p1;
     expect(mux.pendingCountFor('s1')).toBe(1);
     const p4 = mux.forwardFromUpstream('srv', 's1', baseRpc('4'));
     expect(mux.pendingCountFor('s1')).toBe(2);
-    mux.resolveFromClient('2', { jsonrpc: '2.0', id: '2', result: null });
-    mux.resolveFromClient('4', { jsonrpc: '2.0', id: '4', result: null });
+    mux.resolveFromClient('2', 's1', { jsonrpc: '2.0', id: '2', result: null });
+    mux.resolveFromClient('4', 's1', { jsonrpc: '2.0', id: '4', result: null });
     await Promise.all([p2, p4]);
   });
 
@@ -167,14 +167,14 @@ describe('ReverseChannelMux', () => {
     expect(mux.pendingCountFor('s1')).toBe(1);
     expect(mux.pendingCountFor('s2')).toBe(1);
 
-    // Cross-session resolveFromClient is the calling code's responsibility
-    // to gate; the mux itself resolves by requestId regardless of who calls.
-    // (We assert getPendingSessionId so the route layer can enforce binding.)
+    // The mux gates resolution on the caller's session id (see the
+    // cross-session isolation test below); getPendingSessionId still exposes
+    // ownership for callers that want to check before delegating.
     expect(mux.getPendingSessionId('x')).toBe('s1');
     expect(mux.getPendingSessionId('y')).toBe('s2');
 
-    mux.resolveFromClient('x', { jsonrpc: '2.0', id: 'x', result: 1 });
-    mux.resolveFromClient('y', { jsonrpc: '2.0', id: 'y', result: 2 });
+    mux.resolveFromClient('x', 's1', { jsonrpc: '2.0', id: 'x', result: 1 });
+    mux.resolveFromClient('y', 's2', { jsonrpc: '2.0', id: 'y', result: 2 });
     await Promise.all([p1, p2]);
   });
 
@@ -192,7 +192,46 @@ describe('ReverseChannelMux', () => {
     // The new writer accepts traffic.
     const p2 = mux.forwardFromUpstream('srv', 's1', baseRpc('y'));
     expect(w2.sent).toHaveLength(1);
-    mux.resolveFromClient('y', { jsonrpc: '2.0', id: 'y', result: 'ok' });
+    mux.resolveFromClient('y', 's1', { jsonrpc: '2.0', id: 'y', result: 'ok' });
     await p2;
+  });
+
+  it('rejects a resolveFromClient from a different session (cross-session isolation)', async () => {
+    // Security property (v0.9 spec §1.9): a second client MUST NOT be able to
+    // satisfy another client's pending reverse request, even by guessing its
+    // requestId. Ownership is enforced inside the mux, not the route.
+    const mux = new ReverseChannelMux();
+    const victim = makeMockWriter();
+    const attacker = makeMockWriter();
+    mux.registerClient('victim-session', victim);
+    mux.registerClient('attacker-session', attacker);
+
+    // An upstream initiates a reverse sampling request bound to the victim.
+    const victimPromise = mux.forwardFromUpstream(
+      'srv',
+      'victim-session',
+      baseRpc('reverse-1'),
+    );
+    expect(mux.pendingCountFor('victim-session')).toBe(1);
+
+    // The attacker (different session) tries to answer it.
+    const hijacked = mux.resolveFromClient('reverse-1', 'attacker-session', {
+      jsonrpc: '2.0',
+      id: 'reverse-1',
+      result: 'STOLEN',
+    });
+    expect(hijacked).toBe(false);
+    // Still pending — the attacker's response was dropped, not delivered.
+    expect(mux.pendingCountFor('victim-session')).toBe(1);
+
+    // The rightful owner resolves it.
+    const accepted = mux.resolveFromClient('reverse-1', 'victim-session', {
+      jsonrpc: '2.0',
+      id: 'reverse-1',
+      result: 'legit',
+    });
+    expect(accepted).toBe(true);
+    expect(await victimPromise).toEqual({ jsonrpc: '2.0', id: 'reverse-1', result: 'legit' });
+    expect(mux.pendingCountFor('victim-session')).toBe(0);
   });
 });
