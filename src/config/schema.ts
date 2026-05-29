@@ -348,11 +348,12 @@ export const GatewayConfigSchema = z.object({
     /**
      * Apply redaction rules to BOTH legs of a reverse-channel call
      * (upstream-initiated sampling/createMessage → client, and the client's
-     * response → upstream). Off by default: opt in once redaction rules are
-     * tuned, since a block-mode match will refuse the reverse call. Harmless
-     * when no rules are configured (scan is a no-op).
+     * response → upstream). On by default (secure-by-default): harmless when
+     * no rules are configured (scan is a no-op). Set to false to forward
+     * reverse-call payloads without redaction. Note: a block-mode rule will
+     * refuse a matching reverse call.
      */
-    reverseChannelRedaction: z.boolean().default(false),
+    reverseChannelRedaction: z.boolean().default(true),
   }).default({}),
 
   /**

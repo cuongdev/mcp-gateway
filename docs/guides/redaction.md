@@ -70,11 +70,11 @@ set when enabled:
 
 ```yaml
 gateway:
-  reverseChannelRedaction: true   # default: false
+  reverseChannelRedaction: false   # default: true (secure-by-default)
 ```
 
 - **Request leg** (`scope: 'request'`): the upstream's reverse request is scanned before it reaches the client.
 - **Response leg** (`scope: 'response'`): the client's response is scanned before it reaches the upstream.
 - A `block`-mode match on either leg refuses the reverse call with JSON-RPC error `-32000`; findings are persisted with `capabilityKind: 'sampling'`.
-- Off by default (opt in once rules are tuned). Harmless when no rules are configured — the scan is a no-op.
+- On by default (secure-by-default); harmless when no rules are configured — the scan is a no-op. Set `false` to disable.
 
