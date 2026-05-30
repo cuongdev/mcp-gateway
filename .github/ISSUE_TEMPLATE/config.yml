@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/cuongdev/mcp-gateway/security/advisories/new
+    about: Please report security issues privately, not as public issues.
+  - name: 📖 Documentation & guides
+    url: https://github.com/cuongdev/mcp-gateway#-documentation
+    about: Architecture and feature guides.

@@ -4,6 +4,7 @@
 
 ### One gateway for all your MCP servers — with the auth, access control, and observability that production actually needs.
 
+[![CI](https://github.com/cuongdev/mcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/cuongdev/mcp-gateway/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A520-3c873a.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg)](https://www.typescriptlang.org/)
