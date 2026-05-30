@@ -42,7 +42,10 @@ export function CircuitCard({ circuit }: { circuit: CircuitSummary }) {
   const trip = useTripCircuit();
   const close = useCloseCircuit();
   const tone = STATE_TONE[circuit.state];
-  const sr = successRate(circuit.rolling);
+  // The list endpoint (GET /api/circuits) omits `rolling`; it's only present
+  // in the detail/history view. Default to [] so the card renders either way.
+  const rolling = circuit.rolling ?? [];
+  const sr = successRate(rolling);
 
   return (
     <Card>
@@ -56,7 +59,7 @@ export function CircuitCard({ circuit }: { circuit: CircuitSummary }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Sparkline rolling={circuit.rolling} windowSize={circuit.config.windowSize} />
+        <Sparkline rolling={rolling} windowSize={circuit.config.windowSize} />
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div>
             <div className="text-muted-foreground">Success</div>
@@ -64,7 +67,7 @@ export function CircuitCard({ circuit }: { circuit: CircuitSummary }) {
           </div>
           <div>
             <div className="text-muted-foreground">p99 ms</div>
-            <div className="font-semibold">{p99(circuit.rolling) ?? '—'}</div>
+            <div className="font-semibold">{p99(rolling) ?? '—'}</div>
           </div>
           <div>
             <div className="text-muted-foreground">{circuit.state === 'circuit_open' ? 'Retry' : 'Calls'}</div>

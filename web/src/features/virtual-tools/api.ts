@@ -8,7 +8,12 @@ const KEY = ['virtual-tools'] as const;
 export function useVirtualTools() {
   return useQuery({
     queryKey: KEY,
-    queryFn: () => api<{ tools: VirtualToolSummary[] }>('/api/virtual-tools'),
+    // The API returns { virtualTools }, but the page consumes `data.tools`.
+    // Map it here so the list actually renders (previously always empty).
+    queryFn: async () => {
+      const r = await api<{ virtualTools: VirtualToolSummary[] }>('/api/virtual-tools');
+      return { tools: r.virtualTools };
+    },
   });
 }
 

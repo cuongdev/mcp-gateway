@@ -36,8 +36,11 @@ export function useCreateRedactionRule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string; kind: string; pattern: string; mode: RedactionMode; replacement?: string; scopeRequest?: boolean; scopeResponse?: boolean }) =>
-      apiPost<{ rule: RedactionRule }>('/api/redaction/rules', body),
-    onSuccess: (data) => { toast.success(`Rule "${data.rule.name}" created`); qc.invalidateQueries({ queryKey: RULES_KEY }); },
+      apiPost<RedactionRule>('/api/redaction/rules', body),
+    // The API returns the rule row directly (not wrapped in { rule }). Reading
+    // data.rule.name threw here, which aborted the mutate onSuccess (the sheet
+    // never closed). Use the row's name field.
+    onSuccess: (data) => { toast.success(`Rule "${data.name}" created`); qc.invalidateQueries({ queryKey: RULES_KEY }); },
     onError: (err: Error) => toast.error(`Create failed: ${err.message}`),
   });
 }
