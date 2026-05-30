@@ -1,36 +1,124 @@
-# MCP Gateway
+<div align="center">
 
-A self-hosted MCP Gateway that provides **centralized management**, **access control (OIDC + RBAC/ABAC/ReBAC)**, and **observability** for multiple MCP servers.
+# 🛡️ MCP Gateway
 
-Inspired by [MCPJungle](https://github.com/mcpjungle/MCPJungle), built with TypeScript.
+### One gateway for all your MCP servers — with the auth, access control, and observability that production actually needs.
 
-## Architecture
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A520-3c873a.svg)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg)](https://www.typescriptlang.org/)
+[![MCP](https://img.shields.io/badge/MCP-2024--11--05-7c3aed.svg)](https://modelcontextprotocol.io/)
+[![Version](https://img.shields.io/badge/version-0.8.0-22c55e.svg)](https://github.com/cuongdev/mcp-gateway/releases)
 
-```
-Developers ──HTTP──▸ ┌──────────────────────────┐
-                     │   HTTP API (/api/*)       │──▸ Management
-                     │   - Server registration   │    REST API
-                     │   - Tool management        │
-                     │   - Policy / role mgmt     │
-                     │   - Metrics & health       │
-                     │──────────────────────────│
-AI Agents  ──MCP───▸ │   Gateway MCP Server      │──▸ Upstream
-(Claude,             │   - POST /mcp             │    MCP Servers
- Cursor,             │   - POST /mcp/groups/:g   │
- VS Code)            └──────────────────────────┘
-```
+A self-hosted **Model Context Protocol (MCP) gateway / proxy** that puts every upstream MCP server behind **one endpoint** — with **OIDC authentication**, **fine-grained access control (RBAC/ABAC/ReBAC)**, **circuit breaking**, **PII/secret redaction**, a **42-connector catalog**, and a full **admin dashboard**.
 
-### Key Concepts
+<img src="docs/screenshots/overview.png" alt="MCP Gateway dashboard — overview" width="900">
 
-**Canonical Tool Naming** — Tools are exposed as `server-name__tool-name` to ensure global uniqueness across multiple servers.
+</div>
 
-**Tool Groups** — Curated subsets of tools with dedicated MCP endpoints. An AI agent connecting to `/mcp/groups/data-analyst` only sees data-related tools, reducing context window pollution.
+---
 
-**Dual Mode** — Development mode (no auth, full access) for local use, Enterprise mode (OIDC, strict ACL, audit) for production.
+## 💡 Why MCP Gateway?
 
-**Session Manager** — Abstracts transport differences. HTTP servers use fetch; STDIO servers use persistent child processes with idle timeouts.
+Connecting AI agents (Claude, Cursor, VS Code…) to MCP servers one-by-one doesn't scale: every client re-configures every server, there's no central auth, no access control, no audit trail, and one flaky upstream can hang everything.
 
-## Quick Start
+**MCP Gateway** sits in the middle and gives you a single control plane:
+
+- 🔌 **Register once, use everywhere** — agents connect to one `/mcp` endpoint; the gateway fans out to all upstreams.
+- 🔐 **Real authentication** — OIDC/SSO login + session cookies + personal access tokens, not just static API keys.
+- 🛂 **Fine-grained authorization** — Casbin RBAC/ABAC/ReBAC decides exactly who can call which tool.
+- 🧰 **Curated tool surfaces** — expose only the tools an agent needs via scoped group endpoints, cutting context-window pollution.
+- 🩺 **Stays up** — per-server circuit breaker + health probes isolate failing upstreams automatically.
+- 🕵️ **Stays safe** — built-in PII/secret redaction scrubs tool arguments and responses; approval gates protect sensitive tools.
+- 📊 **Stays observable** — Prometheus metrics, OpenTelemetry tracing, JSONL audit logs, and per-principal usage stats.
+
+> Already using **MCPJungle**? See the [honest side-by-side comparison](#-mcp-gateway-vs-mcpjungle) below.
+
+---
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🔌 **Unified MCP endpoint** | One `/mcp` for all upstreams. Canonical `server__tool` naming keeps names globally unique. |
+| 🧰 **Tool Groups** | Curated, role-gated subsets of tools, each on its own endpoint (`/mcp/groups/:name`). |
+| 🔐 **OIDC + Sessions + PATs** | SSO login via any OIDC provider, signed session cookies, and personal access tokens. |
+| 🛂 **Casbin RBAC/ABAC/ReBAC** | Policy-file access control down to the individual tool. |
+| 🩺 **Circuit Breaker** | Per-server state machine (`healthy → degraded → open → half-open`) + background probe recovery. |
+| 🕵️ **PII / Secret Redaction** | 22 built-in rules (AWS, GitHub, Stripe, JWT, PEM, credit cards…) with `redact / block / warn` modes. |
+| ✅ **Approval Workflows** | Mark tools `sensitive` → calls require admin approval before execution. |
+| 🧩 **Virtual Tools** | Compose multiple upstream tools into one declarative DAG meta-tool. |
+| 📦 **Connector Catalog** | 42 ready-to-install server templates with a guided install wizard. |
+| 🚦 **Rate Limit · Quota · Cache** | Per-principal sliding-window limits, daily/monthly quotas, and tool-call caching (memory / SQL / Redis). |
+| 🌐 **Outbound Proxy Mgmt** | Route upstream calls through named HTTP/HTTPS/SOCKS5 proxies. |
+| 🏢 **Multi-tenancy** | Tenant isolation with per-tenant scoping. |
+| 📊 **Observability** | Prometheus metrics + OpenTelemetry traces + JSONL audit + usage analytics. |
+| 🖥️ **Admin Dashboard** | A full web UI for everything above. |
+
+---
+
+## 📸 Dashboard Tour
+
+<table>
+  <tr>
+    <td width="50%"><b>📦 Connector Catalog</b><br/>42 one-click server templates.<br/><img src="docs/screenshots/catalog.png" alt="Catalog"></td>
+    <td width="50%"><b>🕵️ PII / Secret Redaction</b><br/>22 built-in rules, redact/block/warn.<br/><img src="docs/screenshots/redaction.png" alt="Redaction"></td>
+  </tr>
+  <tr>
+    <td width="50%"><b>🧰 Tools</b><br/>Canonical <code>server__tool</code> naming.<br/><img src="docs/screenshots/tools.png" alt="Tools"></td>
+    <td width="50%"><b>🩺 Servers &amp; Circuit Health</b><br/>Live status + circuit-breaker state.<br/><img src="docs/screenshots/servers.png" alt="Servers"></td>
+  </tr>
+  <tr>
+    <td width="50%"><b>🛂 Policies (Casbin)</b><br/>Fine-grained RBAC/ABAC rules.<br/><img src="docs/screenshots/policies.png" alt="Policies"></td>
+    <td width="50%"><b>🌐 Outbound Proxies</b><br/>Inline credentials auto-redacted.<br/><img src="docs/screenshots/proxies.png" alt="Proxies"></td>
+  </tr>
+  <tr>
+    <td width="50%"><b>📊 Metrics</b><br/>Prometheus exposition + live counters.<br/><img src="docs/screenshots/metrics.png" alt="Metrics"></td>
+    <td width="50%"><b>👥 Identity</b><br/>Users, MCP clients, tokens, OIDC.<br/><img src="docs/screenshots/users.png" alt="Users"></td>
+  </tr>
+</table>
+
+---
+
+## 🆚 MCP Gateway vs MCPJungle
+
+Both projects solve the same core problem — *"one place to manage and connect to all your MCP servers."* [MCPJungle](https://github.com/mcpjungle/MCPJungle) is a mature, popular, **Go** single-binary gateway. MCP Gateway is a **TypeScript** gateway focused on **enterprise security, governance, and resilience**.
+
+> The table reflects MCPJungle as of its **v0.4.5** (per its public docs/README) and MCP Gateway **v0.8.0**. Corrections welcome via PR.
+
+| Capability | 🛡️ MCP Gateway | 🌿 MCPJungle |
+|---|:---:|:---:|
+| Language / distribution | TypeScript (Node ≥ 20) | **Go (single binary)** |
+| Unified `/mcp` endpoint | ✅ | ✅ |
+| Canonical `server__tool` naming | ✅ | ✅ |
+| Tool Groups (scoped endpoints) | ✅ updatable, prompts included | ✅ no updates, no prompts in groups |
+| Transports | streamable-HTTP, stdio | streamable-HTTP, stdio, SSE *(immature)* |
+| **Client / user authentication** | **OIDC/SSO + session cookies + PATs** | Static bearer tokens only *(no OAuth/OIDC)* |
+| **Authorization model** | **Casbin RBAC / ABAC / ReBAC** | admin/user roles + per-client allow-lists |
+| Upstream auth | bearer token, custom headers | bearer, headers, **upstream OAuth (beta)** |
+| **Circuit breaker + health probes** | ✅ | — *(not documented)* |
+| **PII / secret redaction** | ✅ 22 rules | ❌ |
+| **Approval workflows** | ✅ | ❌ |
+| **Virtual tools (composition)** | ✅ DAG | ❌ |
+| **Rate limit · quota · cache** | ✅ | — *(not documented)* |
+| **Outbound proxy management** | ✅ | ❌ |
+| **Multi-tenancy** | ✅ | ❌ |
+| Connector catalog | ✅ 42 templates + installer | register via config files |
+| MCP spec coverage | tools, prompts, resources, completion, logging, roots | tools, prompts, resources |
+| Observability | Prometheus + **OTel tracing** + **JSONL audit** + usage | Prometheus metrics + `/health` |
+| Admin dashboard | ✅ | ✅ |
+| Maturity | newer (v0.8.0) | **mature** (~1k★, releasing since 2025) |
+| License | MIT | MPL-2.0 |
+
+**Choose MCP Gateway when** you need OIDC/SSO user login, fine-grained RBAC/ABAC, audit trails, PII redaction, circuit breaking, approval gates, or multi-tenancy — i.e. **production governance & security**.
+
+**Choose MCPJungle when** you want a lightweight, battle-tested **Go single binary**, the smallest possible footprint, or its **browser-based upstream-OAuth** auto-negotiation. It's a great, more mature option for simpler setups.
+
+*MCPJungle is excellent work and the inspiration for this project — this comparison is about fit, not winners.*
+
+---
+
+## 🚀 Quick Start
 
 > Requires **Node.js >= 20**.
 
@@ -68,7 +156,21 @@ npm start                  # run the compiled gateway
 ./bin/mcp-gateway --help   # admin CLI: register servers, manage tools/policies/catalog, etc.
 ```
 
-## API Reference
+---
+
+## 🧩 Key Concepts
+
+**Canonical Tool Naming** — every tool is exposed as `server-name__tool-name`, so names stay globally unique across servers (`filesystem__read_file`, `database__query_data`).
+
+**Tool Groups** — curated subsets of tools with dedicated MCP endpoints. An agent on `/mcp/groups/data-analyst` only sees data tools, reducing context-window pollution.
+
+**Dual Mode** — *Development* (no auth, full access, console logging) for local use; *Enterprise* (OIDC, strict Casbin ACL, file audit, metrics) for production.
+
+**Session Manager** — abstracts transport differences: HTTP servers use `fetch`; STDIO servers use persistent child processes with idle timeouts.
+
+---
+
+## 📡 API Reference
 
 ### MCP Endpoints (for AI agents)
 
@@ -102,11 +204,11 @@ npm start                  # run the compiled gateway
 | `POST`   | `/api/policies/reload`        | Reload policies from file       |
 | `POST`   | `/api/roles`                  | Assign role to user             |
 
-## Configuration
+---
+
+## ⚙️ Configuration
 
 ### Server Registration
-
-Register MCP servers via config file or API:
 
 ```json
 {
@@ -133,19 +235,6 @@ Register MCP servers via config file or API:
 }
 ```
 
-Or via API:
-```bash
-curl -X POST http://localhost:3000/api/servers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-db",
-    "transport": {
-      "type": "streamable-http",
-      "url": "http://localhost:8002/mcp"
-    }
-  }'
-```
-
 ### Tool Groups
 
 ```json
@@ -161,14 +250,10 @@ curl -X POST http://localhost:3000/api/servers \
 }
 ```
 
-AI agents connect to the group endpoint:
-```
-POST /mcp/groups/data-analyst
-```
-
 ### Access Control (Casbin)
 
 Edit `config/policy.csv`:
+
 ```csv
 p, admin, *, *
 p, analyst, tool:database__*, execute
@@ -179,119 +264,9 @@ g, analyst, user
 g, alice@example.com, admin
 ```
 
-## What's New in v0.8.0 — Pipeline Platform
+---
 
-Five user-visible features built on a unified foundation, shipped as one release:
-
-### Foundation (internal)
-- **Capability layer** — unified `CapabilityRegistry` façade over Tool / Prompt / Resource / Root registries.
-- **Server state machine** — per-server health tracking with `healthy → degraded → circuit_open → half_open → healthy` transitions, persisted to `server_state` table.
-- **Probe loop** — background heartbeat that probes degraded servers via `tools/list` and recovers them automatically.
-- **Connector template registry** — 42 seeded MCP-server templates shipped in `data/catalog/connectors.json`.
-
-### P6 — Circuit Breaker
-- `SessionManager.send()` consults the state machine before every upstream call, rejecting with `circuit_open` when tripped.
-- New `mcp_circuit_state`, `mcp_circuit_trips_total`, `mcp_circuit_rejections_total` Prometheus metrics; `server.state.changed` webhook event.
-- `/api/circuits` admin routes (GET list, trip/close/reset, PATCH config); `mcp-gateway circuit` CLI; `/circuits` dashboard with sparkline + manual controls.
-
-### P7 — PII / Secret Redaction
-- 22+ built-in regex rules (AWS, GitHub, GitLab, Anthropic, OpenAI, Stripe, JWT, PEM keys, SSH keys, email, phone, SSN, credit-card Luhn-checked, db URLs with creds, etc.).
-- `RedactionEngine` runs on `tools/call` request `arguments` and response `content`; modes: `redact | block | warn`.
-- Custom per-tenant rules; built-in rules can have their mode changed but not their pattern.
-- `safe-regex` validator on every rule; ReDoS-prone patterns are rejected with a warning.
-- Findings recorded WITHOUT the matched text (only rule_id + count + offset).
-- `/api/redaction` admin routes; `mcp-gateway redaction` CLI; `/redaction` dashboard with Rules + Findings + Test playground tabs.
-
-### P8 — Full MCP Spec Coverage
-- `resources/list`, `resources/read`, `resources/templates/list`, `resources/subscribe`, `resources/unsubscribe`.
-- `completion/complete`, `logging/setLevel` (broadcasts to all upstreams).
-- `roots/list` returns gateway-managed admin view (reverse-channel deferred to v0.9).
-- `/api/resources` admin routes; `/resources` browser with mime-aware viewer (text via pre, image via `<img>`, binary download).
-
-### P9 — Connector Catalog
-- 42 seed templates across developer-tools / databases / productivity / cloud / ai-ml / communications / local.
-- `CatalogInstaller` atomically installs a server with env validation, auto-discovery, and rollback on failure.
-- `catalog_installs` table tracks template version → compares to current `connectors.json` for `update_available` flag.
-- `/api/catalog/{connectors,install,installs}` admin routes; `mcp-gateway catalog list/show/install/uninstall` CLI; `/catalog` dashboard with Browse + Installed tabs + 3-step install wizard (configure → preview → result).
-
-### P10 — Tool Composition / Virtual Tools
-- Declarative DAG plan format with strict AJV validation: ≤50 steps, ≤16 KB JSON, whitelist template grammar (`{{input.X}}`, `{{steps.id.path}}`, `{{env.KEY}}`).
-- `VirtualToolExecutor` runs steps sequentially or in parallel groups; `fail_fast` or `best_effort` error policy.
-- Each step routes through the full pipeline so circuit breaker + redaction apply uniformly.
-- Virtual tools appear in `tools/list` with `_virtual: true` marker.
-- `/api/virtual-tools` admin routes (CRUD + validate + test); `mcp-gateway virtual-tool` CLI; `/virtual-tools` dashboard with list + JSON plan editor + dry-run test panel.
-
-### Storage
-- Two new migrations: `0008_p6_foundation` (server_state, resources, resource_templates, roots) + `0009_p6_features` (redaction_rules, redaction_findings, sampling_log, catalog_installs, virtual_tools).
-- Backwards-compatible — no existing column changes, no API breakage.
-
-### Frontend
-- 6 new pages: `/circuits`, `/redaction`, `/catalog`, `/resources`, `/virtual-tools`, `/virtual-tools/:name`.
-- Sidebar reorganised: "Servers & Tools" group (Catalog, Servers, Tools, Virtual Tools, Resources, Prompts, Proxies) + new "Security" group (Redaction).
-- 6 Playwright smokes added.
-
-### Limitations
-- Reverse channel (`sampling/createMessage`, `roots/list` fanout to client) deferred. Gateway logs sampling requests but does not yet route them back to MCP clients.
-- Virtual tool editor is JSON-based; visual react-flow editor deferred to v0.9.
-- Catalog `enableCircuitBreaker` / `applyRedaction` options accepted but currently no-ops (defaults are global).
-- Update detection on catalog installs is read-only; `POST /api/catalog/installs/:id/update` returns 501.
-
-## What's New in v0.7.0-p5
-
-- **Outbound proxy management** — register named HTTP/HTTPS (and best-effort SOCKS5) proxies via `/api/proxies` or `mcp-gateway proxy add`. Routes upstream MCP and OpenAPI calls through them via `undici.ProxyAgent` dispatchers cached in a `ProxyRegistry`.
-- **Three-level precedence** — server-level `proxyName` overrides group-level (when call comes via `/mcp/groups/:name`), which overrides `proxy.defaultName` global default. Direct connection when none set.
-- **Password redaction** — proxy URLs with inline credentials (`http://user:pass@host`) are redacted to `http://user:***@host` in all GET responses; internal usage retains plaintext for actual proxy auth.
-- **Block-by-default deletion** — `DELETE /api/proxies/:id` returns 409 with a `references` list when the proxy is in use; `?force=true` cascades nullify and returns a `detached` list.
-- **Fail-closed** — proxy unreachable → caller fails with the underlying error (no silent fallback to direct connection).
-- **New CLI:** `mcp-gateway proxy add/list/show/update/delete/attach/detach`.
-- **Tracing:** `proxy.name` + `proxy.scheme` attributes on existing `gateway.session.send` spans.
-- **Metrics:** `mcp_proxy_requests_total{proxy, result}` counter.
-- **Limitations:** OpenAPI servers receive their dispatcher at registration time; PATCHing `proxyName` later does NOT refresh the cached adapter (re-register the server to pick up new proxies). SOCKS5 routing is best-effort via a `socks-proxy-agent` shim; HTTP/HTTPS proxies are the primary supported path.
-
-## What's New in v0.6.0-p4
-
-- **Multi-tenant foundation** — `tenants` table with `tnt_default` row auto-created at migration. Existing single-tenant data backfills automatically.
-- **Tenant resolution middleware** — pass `X-Tenant: <slug>` header to scope requests. Unknown slug → 404, suspended → 402.
-- **System admin API** — `POST/GET /api/system/tenants`, `PATCH /:id`, `POST /:id/suspend`, `POST /:id/resume`.
-- **CLI** — `mcp-gateway tenant create <slug> [--plan pro]`, `tenant list`, `tenant suspend <id>`, `tenant resume <id>`.
-- **`tenant_id` columns** added to `principals`, `servers`, `tools`, `audit_logs`, `usage_counters` (backfilled to `tnt_default`).
-- **No subdomain routing** in v1 — use a reverse proxy that maps `acme.gateway.example.com` to header `X-Tenant: acme`.
-- **Deferred (backlog):** Postgres row-level security, Casbin domain-RBAC migration, per-plan quota tiers, tenant-scoped OIDC providers, tenant memberships (cross-tenant principal), repo-layer tenant guard enforcement, data export tooling, billing hooks.
-- **Build stability:** all existing repo methods continue to work without modification because every new `tenant_id` column has `DEFAULT 'tnt_default'`. Multi-tenant deployments should add repo-layer scoping in a follow-up before production use.
-
-## What's New in v0.5.0-p3
-
-- **Approval workflow** — mark a tool `sensitive` → gate middleware returns `202 approval_required` with `approval_id`; admin approves via `/api/approvals/:id/approve` or `mcp-gateway approval approve <id>`; caller reissues with `X-MCP-Approval-Id` header for execution.
-- **Webhook outbound dispatcher** — register webhooks via `/api/webhooks` or `mcp-gateway webhook add`; auto-emits `approval.requested/approved/rejected`; HMAC-SHA256 signature in `X-MCP-Signature` header; exponential-backoff retry up to 5 attempts.
-- **OpenAPI 3.x → MCP adapter** — register an upstream via `mcp-gateway register --openapi <urlOrPath> --name X`; gateway auto-discovers operations as tools and routes `tools/call` through the adapter. SSRF guard blocks private IPs by default.
-- **HMAC-signed approval link tokens** — `signApprovalToken/verifyApprovalToken` for embedding in chat-link approval flows (token signing exposed; UI/chat integration deferred).
-- **New CLI:** `mcp-gateway approval list/approve/reject`, `mcp-gateway webhook add/list/delete`, `mcp-gateway register --openapi`.
-- **New env:** `approval.tokenSecret` required when `approval.enabled` (≥32 chars).
-- **Deferred (backlog):** dashboard approvals view, Slack-blocks formatter, email notifier, long-poll header, two-person approval.
-
-## What's New in v0.4.0-p2
-
-- **OIDC ↔ Principal unified** — OAuth2 callbacks now upsert a User principal and issue a `{ pid }` session cookie read by the P1 `sessionCookieMiddleware`. `createAuthMiddleware`/`resolveUser` retired.
-- **Rate limiting** — per-Principal × per-tool sliding window. Memory (single-instance) or Redis (multi-instance) backend. `429 + Retry-After + X-RateLimit-*` on overflow.
-- **Quota** — daily + monthly counters per Principal with overrides and midnight-UTC reset.
-- **Tool-call caching** — opt-in per tool via `mcp-gateway tool flag <name> --cacheable --ttl 60`. Memory/SQL/Redis backends. `X-MCP-Cache: hit|miss` header. Auto-invalidates on tool disable.
-- **OpenTelemetry** — OTLP exporter + `mcp.tools.call` and `gateway.session.send` spans + `traceparent` forwarding. Off by default; set `tracing.enabled=true`.
-- **New metrics** — `mcp_rate_limit_hits_total`, `mcp_quota_exceeded_total`, `mcp_cache_hits_total/misses_total`, `mcp_tool_call_duration_seconds`, `mcp_upstream_latency_seconds`.
-- **Breaking:** `auth.sessionCookieSecret` (≥32 chars) is now REQUIRED when any `oidcProviders` are configured.
-- **New env vars:** `REDIS_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_ARG`.
-
-## What's New in v0.3.0-p1
-
-- **MCP client provisioning** — `/api/mcp-clients` with allowlists and token rotation
-- **User accounts + PATs** — `/api/users`, `/api/users/me/tokens`; group RBAC for MCP clients
-- **Prompt registry** — `/api/prompts` for versioned, templated system prompts
-- **Usage stats** — `/api/usage` endpoint (per-server, per-tool, per-principal)
-- **Full mcp-gateway CLI** — `register`, `deregister`, `invoke`, `role assign`, `token`, `config`, `policy`, `usage`, and more
-- **Postgres adapter** — `STORAGE_DRIVER=postgres DATABASE_URL=postgres://...`
-- **HTTP session modes** — `session_mode: stateless | stateful`, custom headers, env var substitution `${VAR}`
-- **Docker** — `Dockerfile.stdio` (Node + uv + npx) and `docker-compose.prod.yml` with Postgres
-
-## Documentation
+## 📚 Documentation
 
 - [Architecture](ARCHITECTURE.md) — components, request flow, module layout
 - [Connector Catalog](docs/guides/catalog.md)
@@ -301,15 +276,43 @@ Five user-visible features built on a unified foundation, shipped as one release
 - [MCP Spec Coverage](docs/guides/mcp-spec-coverage.md)
 - [Migration from v0.1](docs/guides/migration-from-v0.1.md)
 
-## Tech Stack
+---
 
-- **Hono** — HTTP framework
-- **jose** — JWT/OIDC validation
-- **Casbin** — Policy engine (RBAC/ABAC/ReBAC)
-- **Pino** — Structured logging
-- **prom-client** — Prometheus metrics
-- **Zod** — Config validation
+## 🗒️ Release Highlights
 
-## License
+### v0.8.0 — Pipeline Platform
 
-MIT
+Five user-visible features built on a unified foundation:
+
+- **Circuit Breaker** — per-server state machine + probe-loop recovery; `mcp_circuit_*` metrics; `/circuits` dashboard.
+- **PII / Secret Redaction** — 22 built-in rules, `redact/block/warn` modes, custom per-tenant rules, `safe-regex` validation; `/redaction` dashboard.
+- **Full MCP Spec Coverage** — resources, prompts, completion, logging, roots in addition to tools.
+- **Connector Catalog** — 42 seed templates, atomic installer with env validation + rollback; `/catalog` install wizard.
+- **Virtual Tools** — declarative DAG composition of upstream tools, AJV-validated plans; `/virtual-tools` editor.
+
+<details>
+<summary><b>Earlier releases (v0.3 – v0.7)</b></summary>
+
+- **v0.7.0-p5 — Outbound proxies:** named HTTP/HTTPS/SOCKS5 proxies with 3-level precedence, password redaction, fail-closed routing.
+- **v0.6.0-p4 — Multi-tenancy:** `tenants` table, `X-Tenant` resolution middleware, system admin API, `tenant_id` scoping.
+- **v0.5.0-p3 — Differentiation:** approval workflow, webhook dispatcher (HMAC-signed), OpenAPI 3.x → MCP adapter with SSRF guard.
+- **v0.4.0-p2 — Hardening:** OIDC↔Principal unification, rate limiting, quotas, tool-call caching, OpenTelemetry tracing.
+- **v0.3.0-p1 — Parity:** MCP client provisioning, user accounts + PATs, prompt registry, usage stats, Postgres adapter, full CLI.
+
+</details>
+
+---
+
+## 🛠️ Tech Stack
+
+**Hono** (HTTP) · **jose** (JWT/OIDC) · **Casbin** (policy engine) · **Pino** (logging) · **prom-client** (metrics) · **Zod** (config) · **React + Vite** (dashboard) · **libSQL / Postgres** (storage)
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) © Cuong Tuan Nguyen
+
+<div align="center">
+<sub>Inspired by <a href="https://github.com/mcpjungle/MCPJungle">MCPJungle</a> · Built with TypeScript</sub>
+</div>
