@@ -43,7 +43,7 @@ export function performHealthCheck(
 
   return {
     status,
-    version: process.env["npm_package_version"] ?? "0.1.0",
+    version: process.env["npm_package_version"] ?? "0.8.0",
     uptime: Math.floor((Date.now() - startTime) / 1000),
     timestamp: new Date().toISOString(),
     servers,

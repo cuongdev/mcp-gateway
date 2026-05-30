@@ -32,19 +32,40 @@ AI Agents  ──MCP───▸ │   Gateway MCP Server      │──▸ Upst
 
 ## Quick Start
 
+> Requires **Node.js >= 20**.
+
 ```bash
+# Clone
+git clone https://github.com/cuongdev/mcp-gateway.git
+cd mcp-gateway
+
 # Install dependencies
 npm install
 
-# Development mode (no auth)
+# Copy the env template and adjust as needed
+cp .env.example .env
+
+# Development mode (no auth, full access)
 npm run dev
 
-# Enterprise mode
+# Web dashboard (separate Vite dev server)
+npm run dev:web
+
+# Enterprise mode (OIDC + strict ACL)
 GATEWAY_MODE=enterprise \
-OIDC_DISCOVERY_URL=https://... \
+OIDC_DISCOVERY_URL=https://your-provider/.well-known/openid-configuration \
 OIDC_CLIENT_ID=mcp-gateway \
 OIDC_AUDIENCES=mcp-gateway \
+GATEWAY_SESSION_SECRET="$(openssl rand -hex 32)" \
 npm run dev
+```
+
+### Production build & CLI
+
+```bash
+npm run build              # compile to dist/ + bundle the web dashboard
+npm start                  # run the compiled gateway
+./bin/mcp-gateway --help   # admin CLI: register servers, manage tools/policies/catalog, etc.
 ```
 
 ## API Reference
@@ -269,6 +290,16 @@ Five user-visible features built on a unified foundation, shipped as one release
 - **Postgres adapter** — `STORAGE_DRIVER=postgres DATABASE_URL=postgres://...`
 - **HTTP session modes** — `session_mode: stateless | stateful`, custom headers, env var substitution `${VAR}`
 - **Docker** — `Dockerfile.stdio` (Node + uv + npx) and `docker-compose.prod.yml` with Postgres
+
+## Documentation
+
+- [Architecture](ARCHITECTURE.md) — components, request flow, module layout
+- [Connector Catalog](docs/guides/catalog.md)
+- [Circuit Breaker](docs/guides/circuit-breaker.md)
+- [PII / Secret Redaction](docs/guides/redaction.md)
+- [Virtual Tools](docs/guides/virtual-tools.md)
+- [MCP Spec Coverage](docs/guides/mcp-spec-coverage.md)
+- [Migration from v0.1](docs/guides/migration-from-v0.1.md)
 
 ## Tech Stack
 

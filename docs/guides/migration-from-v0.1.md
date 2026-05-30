@@ -84,7 +84,7 @@ Set `mode: development` in config or `GATEWAY_MODE=development`. Auth is skipped
 
 1. Stop the gateway.
 2. Restore `./data.backup` over `./data`.
-3. Check out the v0.1.0 commit (`e73e055`) and rebuild.
+3. Check out your previous release (your last pre-upgrade commit) and rebuild.
 
 ## Known regressions (deferred to P1)
 

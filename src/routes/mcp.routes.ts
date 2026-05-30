@@ -364,7 +364,7 @@ async function handleMCPRequest(
         },
         serverInfo: {
           name: "mcp-gateway",
-          version: "0.1.0",
+          version: "0.8.0",
         },
       });
 

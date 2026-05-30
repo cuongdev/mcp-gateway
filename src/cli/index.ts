@@ -33,7 +33,7 @@ async function main() {
   program
     .name('mcp-gateway')
     .description('MCP Gateway management CLI')
-    .version('0.2.0');
+    .version('0.8.0');
 
   registerMigrateCommands(program);
   registerInitServerCommand(program);

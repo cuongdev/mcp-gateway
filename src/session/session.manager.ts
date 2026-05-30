@@ -658,7 +658,7 @@ export class SessionManager {
         params: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          clientInfo: { name: "mcp-gateway", version: "0.1.0" },
+          clientInfo: { name: "mcp-gateway", version: "0.8.0" },
         },
       });
 

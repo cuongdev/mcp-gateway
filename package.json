@@ -1,6 +1,6 @@
 {
   "name": "mcp-gateway",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "description": "MCP Gateway/Proxy with OIDC authentication, access control (RBAC/ABAC/ReBAC), and monitoring",
   "type": "module",
   "main": "dist/index.js",
