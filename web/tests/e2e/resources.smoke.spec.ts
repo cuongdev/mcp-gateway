@@ -15,8 +15,8 @@ test('Resources page renders search + tree placeholder', async ({ page }) => {
 test('Resources empty state shown when no resources', async ({ page }) => {
   await enterDevMode(page, '/dashboard/resources');
   await page.getByRole('heading', { name: 'Resources' }).waitFor();
-  // Either empty state OR list — both are valid
-  await expect(
-    page.getByText(/No resources|Select a resource/i),
-  ).toBeVisible({ timeout: 5_000 });
+  // On a fresh gateway both the tree empty state and the detail placeholder
+  // render. Assert the tree empty state specifically (.first avoids the
+  // strict-mode clash with "Select a resource").
+  await expect(page.getByText(/No resources|Select a resource/i).first()).toBeVisible({ timeout: 5_000 });
 });
