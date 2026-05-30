@@ -18,3 +18,13 @@ web/node_modules
 web/dist
 web/test-results
 web/playwright-report
+
+# local dev / agent state (never publish)
+.claude/
+.docker-config/
+.docker-data/
+# local docker compose override (mounts the local .docker-* dirs above)
+docker/docker-compose.override.yml
+
+# internal planning & design docs (not part of public release)
+docs/superpowers/

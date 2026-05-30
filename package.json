@@ -32,8 +32,16 @@
     "rbac",
     "abac"
   ],
-  "author": "",
+  "author": "Cuong Tuan Nguyen <cuongdev@users.noreply.github.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cuongdev/mcp-gateway.git"
+  },
+  "homepage": "https://github.com/cuongdev/mcp-gateway#readme",
+  "bugs": {
+    "url": "https://github.com/cuongdev/mcp-gateway/issues"
+  },
   "engines": {
     "node": ">=20.0.0"
   },

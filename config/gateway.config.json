@@ -1,15 +1,15 @@
 {
   "mode": "development",
-
   "gateway": {
     "port": 3000,
     "host": "0.0.0.0",
     "mcpPath": "/mcp",
     "apiPath": "/api",
-    "corsOrigins": ["*"],
+    "corsOrigins": [
+      "*"
+    ],
     "requestTimeout": 30000
   },
-
   "servers": [
     {
       "name": "filesystem",
@@ -19,7 +19,10 @@
         "timeout": 30000
       },
       "autoDiscover": true,
-      "healthCheck": { "enabled": true, "intervalMs": 30000 }
+      "healthCheck": {
+        "enabled": true,
+        "intervalMs": 30000
+      }
     },
     {
       "name": "database",
@@ -29,10 +32,12 @@
         "timeout": 30000
       },
       "autoDiscover": true,
-      "healthCheck": { "enabled": true, "intervalMs": 30000 }
+      "healthCheck": {
+        "enabled": true,
+        "intervalMs": 30000
+      }
     }
   ],
-
   "groups": [
     {
       "name": "data-analyst",
@@ -42,7 +47,10 @@
         "database__get_report",
         "filesystem__read_file"
       ],
-      "allowedRoles": ["analyst", "admin"]
+      "allowedRoles": [
+        "analyst",
+        "admin"
+      ]
     },
     {
       "name": "devops",
@@ -52,23 +60,22 @@
         "filesystem__write_file",
         "filesystem__list_directory"
       ],
-      "allowedRoles": ["admin"]
+      "allowedRoles": [
+        "admin"
+      ]
     }
   ],
-
   "authorization": {
     "enabled": false,
     "modelFile": "./config/policy.model.conf",
     "policyFile": "./config/policy.csv",
     "defaultDecision": "allow"
   },
-
   "audit": {
     "enabled": true,
     "storage": "console",
     "logPath": "./logs/audit.jsonl"
   },
-
   "monitoring": {
     "metricsEnabled": true,
     "metricsPath": "/metrics",
