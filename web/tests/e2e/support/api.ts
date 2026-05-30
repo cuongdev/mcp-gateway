@@ -1,4 +1,6 @@
-import { type APIRequestContext, type Playwright } from '@playwright/test';
+import { type APIRequestContext, type PlaywrightWorkerArgs } from '@playwright/test';
+
+type Playwright = PlaywrightWorkerArgs['playwright'];
 
 /**
  * Admin API client used to seed and tear down data for "with-data" E2E tests.
@@ -145,13 +147,13 @@ export async function createSeedApi(playwright: Playwright, baseURL: string): Pr
 
     async createRedactionRule(over = {}) {
       const name = over.name ?? uid('rule');
-      const r = await call<{ rule: { id: string } }>('post', '/api/redaction/rules', {
+      const r = await call<{ id: string }>('post', '/api/redaction/rules', {
         name,
         kind: over.kind ?? 'regex',
         pattern: over.pattern ?? 'secret-\\d+',
-        mode: over.mode ?? 'mask',
+        mode: over.mode ?? 'redact',
       });
-      const id = r.rule.id;
+      const id = r.id;
       cleanups.push(async () => { await ctx.delete(`/api/redaction/rules/${encodeURIComponent(id)}`); });
       return { id, name };
     },
@@ -161,7 +163,10 @@ export async function createSeedApi(playwright: Playwright, baseURL: string): Pr
       const plan = {
         name,
         description: over.description ?? 'seeded virtual tool',
-        steps: [{ type: 'constant', output: { ok: true } }],
+        inputSchema: { type: 'object', additionalProperties: true },
+        steps: [{ id: 'step_one', tool: 'noop', args: {} }],
+        output: { format: 'merged', shape: {} },
+        errorPolicy: 'fail_fast',
       };
       await call('post', '/api/virtual-tools', plan);
       cleanups.push(async () => { await ctx.delete(`/api/virtual-tools/${encodeURIComponent(name)}`); });
