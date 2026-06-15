@@ -4,7 +4,7 @@ Playwright end-to-end coverage for the admin dashboard (`web/`). The suite
 runs the real gateway (`npm start` against a fresh sqlite) plus a mock MCP
 upstream, and drives the built dashboard in a headless browser.
 
-**Status:** 56 spec files · 172 tests · **170 passed / 0 failed** (2 skipped-by-design noted below).
+**Status:** 56 spec files · 3 Playwright projects · 171 tests · **169 passed / 0 failed** (2 skipped-by-design noted below).
 
 ## Running
 
@@ -29,10 +29,22 @@ that, feature areas have **deep** specs:
 - `auth.spec.ts`, `nav.spec.ts` — auth shell + every sidebar link routes
 
 The shared harness lives in `web/tests/e2e/support/`:
-- `auth.ts` — `loginAsAdmin` (dev-mode entry)
+- `auth.ts` — `loginAsAdmin` (dev-mode entry) + `enterAsUser` (user-cookie login)
 - `api.ts` — admin API seed client with LIFO auto-cleanup for every entity
 - `fixtures.ts` — `test` fixture exposing the `api` seeder
-- `mock-mcp.mjs` — mock MCP upstream (`/fs` `/db` `/gh` tool sets)
+- `mock-mcp.mjs` — mock MCP upstream (`/fs` `/db` `/gh` tool / prompt / resource sets)
+
+### Playwright projects (three gateways)
+
+Two screens need a gateway configured differently from the open dev-mode default,
+so they run as isolated projects against their own gateway instance (own port +
+sqlite); the main suite's auth model is untouched:
+
+| Project | Port | Gateway config | Covers |
+|---|---|---|---|
+| `dashboard` | 3001 | dev mode, admin API open, injected `service_account` | everything except the two below |
+| `oidc` | 3002 | `config/e2e-oidc.json` — dev mode + one OIDC provider | OIDC Providers (populated) |
+| `my-tokens` | 3003 | `config/e2e-pat.json` — `requireAuthForApi` so a `user`-cookie login works | My Tokens PAT CRUD |
 
 ## Per-screen coverage
 
@@ -48,8 +60,8 @@ The shared harness lives in `web/tests/e2e/support/`:
 | | Proxies | ✅ | seed + UI create, detail sheet, delete |
 | Identity | Users | ✅ | seed + UI create, row → detail |
 | | MCP Clients | ✅ | seed, UI create (token reveal), detail, rotate token |
-| | My Tokens | ✅ | structure only (see limitations) |
-| | OIDC Providers | ✅ | structure only (see limitations) |
+| | My Tokens | ✅ | `my-tokens` project — create PAT → one-time reveal → list → revoke (user-cookie login) |
+| | OIDC Providers | ✅ | `oidc` project — configured provider card: name, id, login URL, copy |
 | | Policies | ✅ | seed + UI add rule, remove, role bindings |
 | Reliability | Circuits | ✅ | trip/close/reset, detail sheet, filters, inline actions |
 | | Rate Limit | ✅ | status values + rules card |
@@ -90,11 +102,9 @@ The coverage work surfaced three real dashboard bugs (now fixed):
 These can't be exercised end-to-end in the test environment; specs assert
 structure / empty state and are documented in-file:
 
-- **OIDC Providers** — configured from files at startup; no runtime create API.
-- **Approvals / Sampling Log** — produced only by live MCP client traffic; can't
-  be seeded via the admin API.
-- **My Tokens (PAT CRUD)** — the dev principal is a `service_account`; the API
-  rejects PAT management for non-user principals.
+- **Approvals / Sampling Log** — produced only by live MCP client reverse-channel
+  traffic; can't be seeded via the admin API. Would need an MCP-client simulator
+  that drives sampling/createMessage round-trips through the gateway.
 - **Audit / Health populated data** — API-seeded server registration isn't
   surfaced as retrievable audit events, and the health `servers` array is
   populated by a periodic health-check cycle.
