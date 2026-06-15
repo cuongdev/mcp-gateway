@@ -723,6 +723,40 @@ export class SessionManager {
   }
 
   /**
+   * Send `resources/list` to the upstream server.
+   *
+   * Returns an empty array if the server doesn't support resources/list
+   * or if any error occurs.
+   */
+  async discoverResources(
+    serverName: string,
+  ): Promise<Array<{ uri: string; name?: string; description?: string; mimeType?: string }>> {
+    return withSpan('mcp.resources.discover', { 'server.name': serverName }, async (span) => {
+      const request: JsonRpcRequest = {
+        jsonrpc: "2.0",
+        id: `resources-${serverName}-${Date.now()}`,
+        method: "resources/list",
+      };
+      try {
+        const result = await this.send(serverName, request) as {
+          result?: { resources?: Array<{ uri: string; name?: string; description?: string; mimeType?: string }> };
+        };
+        const resources = result?.result?.resources ?? [];
+        span.setAttribute('resources.count', resources.length);
+        return resources.map((r) => ({
+          uri: r.uri,
+          name: r.name,
+          description: r.description,
+          mimeType: r.mimeType,
+        }));
+      } catch {
+        span.setAttribute('resources.count', 0);
+        return [];
+      }
+    });
+  }
+
+  /**
    * Fire-and-forget notification (no response expected).
    */
   private sendNotification(

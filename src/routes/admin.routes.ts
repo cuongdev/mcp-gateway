@@ -363,6 +363,20 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         log.warn({ server: body.name }, "Prompt discovery failed (server may not support prompts/list)");
       }
 
+      // Discover resources — swallow errors quietly (server may not support resources/list)
+      if (deps.resourceRegistry) {
+        try {
+          const resources = await sessionManager.discoverResources(body.name);
+          await deps.resourceRegistry.registerServerResources(body.name, resources);
+          log.info(
+            { server: body.name, resourceCount: resources.length },
+            "Resources discovered"
+          );
+        } catch {
+          log.warn({ server: body.name }, "Resource discovery failed (server may not support resources/list)");
+        }
+      }
+
       return c.json({
         server: body.name,
         tools: tools.map((t: any) => `${body.name}__${t.name}`),
@@ -381,6 +395,10 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
   app.delete("/servers/:name", async (c) => {
     const name = c.req.param("name");
     await toolRegistry.removeServer(name);
+    // Drop discovered prompts/resources too, so a deregistered server leaves
+    // no orphaned capabilities behind.
+    await deps.promptRegistry.removeServer(name).catch(() => undefined);
+    await deps.resourceRegistry?.deregister(name).catch(() => undefined);
     sessionManager.remove(name);
     try {
       await storage.servers.deleteByName(name);
@@ -420,6 +438,31 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     try {
       const tools = await sessionManager.discoverTools(name);
       await toolRegistry.registerServerTools(name, tools);
+
+      // Re-discover prompts (best-effort — server may not support prompts/list).
+      try {
+        const prompts = await sessionManager.discoverPrompts(name);
+        await deps.promptRegistry.registerServerPrompts(
+          name,
+          prompts.map((p) => ({
+            name: p.originalName,
+            description: p.description,
+            argumentsSchema: p.argumentsSchema,
+          })),
+        );
+      } catch {
+        log.warn({ server: name }, "Prompt sync failed (server may not support prompts/list)");
+      }
+
+      // Re-discover resources (best-effort — server may not support resources/list).
+      if (deps.resourceRegistry) {
+        try {
+          const resources = await sessionManager.discoverResources(name);
+          await deps.resourceRegistry.registerServerResources(name, resources);
+        } catch {
+          log.warn({ server: name }, "Resource sync failed (server may not support resources/list)");
+        }
+      }
 
       return c.json({
         server: name,
