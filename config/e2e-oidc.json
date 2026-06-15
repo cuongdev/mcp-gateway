@@ -1,0 +1,18 @@
+{
+  "_comment": "E2E-only gateway config (Playwright `oidc` project, port 3002). Dev mode keeps the admin API open and injects the dev principal — but an OIDC provider is configured so /auth/providers is non-empty and the OIDC Providers page renders populated. authorization stays disabled so /auth/me still grants admin.",
+  "mode": "development",
+  "gateway": { "apiPath": "/api", "mcpPath": "/mcp" },
+  "servers": [],
+  "groups": [],
+  "authorization": { "enabled": false, "defaultDecision": "allow" },
+  "auth": { "sessionCookieSecret": "e2e-oidc-session-cookie-secret-0123456789" },
+  "oidcProviders": [
+    {
+      "id": "acme",
+      "name": "Acme SSO",
+      "discoveryUrl": "https://oidc.example.com/.well-known/openid-configuration",
+      "clientId": "e2e-client-id",
+      "clientSecret": "e2e-client-secret"
+    }
+  ]
+}

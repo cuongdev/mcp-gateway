@@ -1,26 +1,27 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './support/auth';
 
-// OIDC Providers is a read-only page driven by gateway config — there is no
-// create/delete API, so the only meaningful test is the empty-state in dev mode
-// (no providers configured) and the page structure.
-//
-// The seeded-data path is not exercisable from tests because providers are
-// injected at gateway startup time via config, not via the admin REST API.
+// OIDC Providers is a read-only page driven by gateway config. It is exercised
+// in the `oidc` Playwright project, whose gateway (config/e2e-oidc.json) has a
+// provider configured, so the populated card state is reachable. Providers are
+// injected at startup via config — there is no create/delete admin API.
 
 test('OIDC Providers page renders heading and read-only notice', async ({ page }) => {
   await loginAsAdmin(page, '/dashboard/oidc');
   await expect(page.getByRole('heading', { name: 'OIDC Providers' })).toBeVisible({ timeout: 10_000 });
-  // Sub-heading describes the read-only nature
   await expect(page.getByText(/Read-only view of configured identity providers/i)).toBeVisible();
 });
 
-test('OIDC Providers shows empty state in dev mode', async ({ page }) => {
+test('OIDC provider card shows name, id, login URL, and copy affordance', async ({ page }) => {
   await loginAsAdmin(page, '/dashboard/oidc');
   await expect(page.getByRole('heading', { name: 'OIDC Providers' })).toBeVisible({ timeout: 10_000 });
-  // Dev-mode gateway has no providers configured
-  await expect(page.getByText('No OIDC providers configured')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/Edit `oidcProviders` in your config file/i)).toBeVisible();
-  // No create/new button — this page is read-only
-  await expect(page.getByRole('button', { name: /new/i })).toBeHidden();
+
+  // Card content for the configured "Acme SSO" provider.
+  await expect(page.getByText('Acme SSO', { exact: true })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText('acme', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Login URL/i })).toBeVisible();
+  await expect(page.getByText(/Users click "Sign in with Acme SSO"/i)).toBeVisible();
+
+  // Read-only: no create/new button.
+  await expect(page.getByRole('button', { name: /new/i })).toHaveCount(0);
 });

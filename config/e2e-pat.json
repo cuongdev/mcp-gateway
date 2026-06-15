@@ -1,0 +1,12 @@
+{
+  "_comment": "E2E-only gateway config (Playwright `my-tokens` project, port 3003). requireAuthForApi mounts the session-cookie middleware on /api so that POST /auth/dev-login (a *user* principal, type=user) authenticates subsequent /api calls — letting PAT management (which rejects non-user principals) be exercised end-to-end. No OIDC providers, so the login screen still offers the dev 'Enter as Admin' button. authorization stays disabled so the principal is treated as admin.",
+  "mode": "development",
+  "gateway": { "apiPath": "/api", "mcpPath": "/mcp" },
+  "servers": [],
+  "groups": [],
+  "authorization": { "enabled": false, "defaultDecision": "allow" },
+  "auth": {
+    "requireAuthForApi": true,
+    "sessionCookieSecret": "e2e-pat-session-cookie-secret-01234567890"
+  }
+}
