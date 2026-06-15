@@ -4,7 +4,7 @@ Playwright end-to-end coverage for the admin dashboard (`web/`). The suite
 runs the real gateway (`npm start` against a fresh sqlite) plus a mock MCP
 upstream, and drives the built dashboard in a headless browser.
 
-**Status:** 56 spec files · 171 tests · **169 passed / 0 failed** (2 skipped-by-design noted below).
+**Status:** 56 spec files · 172 tests · **170 passed / 0 failed** (2 skipped-by-design noted below).
 
 ## Running
 
@@ -42,9 +42,9 @@ The shared harness lives in `web/tests/e2e/support/`:
 | | Servers | ✅ | register via mock upstream, row renders |
 | | Tools | ✅ | discovered tools render from upstream |
 | | Tool Groups | ✅ | seed + UI create, detail tabs, tool badges |
-| | Resources | ✅ | structure + empty state (see limitations) |
+| | Resources | ✅ | seed → list grouped by server, read content into right panel, URI search filter, enable switch |
 | | Virtual Tools | ✅ | seed + list, editor validate/save, navigate to editor |
-| | Prompts | ✅ | structure + empty state (see limitations) |
+| | Prompts | ✅ | seed → list grouped by server, count badge, enable/disable toggle |
 | | Proxies | ✅ | seed + UI create, detail sheet, delete |
 | Identity | Users | ✅ | seed + UI create, row → detail |
 | | MCP Clients | ✅ | seed, UI create (token reveal), detail, rotate token |
@@ -78,6 +78,12 @@ The coverage work surfaced three real dashboard bugs (now fixed):
 3. **Redaction "create rule" sheet never closed** — the success handler read
    `data.rule.name` but the API returns the row directly; the throw aborted the
    close.
+4. **Resources never populated (anywhere)** — `ResourceRegistry.registerServerResources`
+   existed but had **no caller**: the gateway never sent `resources/list` to an
+   upstream, so the Resources page was permanently empty in production, not just
+   in tests. Added `SessionManager.discoverResources` and wired it into server
+   register + `/servers/:name/sync` (mirroring prompt discovery); deregister now
+   also drops a server's prompts/resources so no orphans remain.
 
 ## Known limitations (dev-mode constraints)
 
@@ -89,8 +95,6 @@ structure / empty state and are documented in-file:
   be seeded via the admin API.
 - **My Tokens (PAT CRUD)** — the dev principal is a `service_account`; the API
   rejects PAT management for non-user principals.
-- **Prompts / Resources** — the mock upstream serves tools only; extend
-  `mock-mcp.mjs` with `prompts/list` / `resources/list` to cover populated state.
 - **Audit / Health populated data** — API-seeded server registration isn't
   surfaced as retrievable audit events, and the health `servers` array is
   populated by a periodic health-check cycle.
