@@ -98,9 +98,7 @@ test('Findings tab shows empty state when server filter has no matches', async (
   // Type something that will never match a server name (Server input, exact
   // placeholder to avoid colliding with the "github_pat" Rule-id input).
   await main.getByPlaceholder('github', { exact: true }).fill('zzz-no-server-exists-xyz');
-  // The findings list shows a "Loading…" state until the query resolves; allow a
-  // generous timeout so the empty state is reliable under slow CI runners.
-  await expect(main.getByText('No findings match the current filters.')).toBeVisible({ timeout: 15_000 });
+  await expect(main.getByText('No findings match the current filters.')).toBeVisible({ timeout: 8_000 });
 });
 
 // ── Test playground tab ───────────────────────────────────────────────────────

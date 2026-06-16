@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,10 @@ export function FindingsTab() {
   const [serverFilter, setServerFilter] = useState('');
   const [ruleFilter, setRuleFilter] = useState('');
   const [scope, setScope] = useState<'all' | 'request' | 'response'>('all');
-  const since = Date.now() - 24 * 3600 * 1000;
+  // Stabilize `since` across re-renders so the findings queryKey is stable —
+  // recomputing Date.now() every render changes the key and causes an infinite
+  // refetch loop (the list never leaves its "Loading…" state).
+  const since = useMemo(() => Date.now() - 24 * 3600 * 1000, []);
 
   const params = {
     since,

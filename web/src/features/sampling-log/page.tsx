@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, ServerCog, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -45,7 +45,10 @@ function ago(ts: number) {
 export function SamplingLogPage() {
   const [serverFilter, setServerFilter] = useState('');
   const [methodFilter, setMethodFilter] = useState<'all' | 'sampling/createMessage' | 'roots/list'>('all');
-  const since = Date.now() - 24 * 3600 * 1000;
+  // Stabilize `since` across re-renders so the sampling-log queryKey is stable —
+  // recomputing Date.now() every render changes the key and causes an infinite
+  // refetch loop (the list never leaves its "Loading…" state).
+  const since = useMemo(() => Date.now() - 24 * 3600 * 1000, []);
 
   const entriesQ = useQuery({
     queryKey: ['sampling-log', { since, server: serverFilter, method: methodFilter }],
