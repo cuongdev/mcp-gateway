@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
 import { Server, Wrench, LayoutGrid, Zap, ShieldAlert, Boxes, ZapOff } from 'lucide-react';
 import {
@@ -21,6 +22,7 @@ import type { ServerSummary, ToolSummary, GroupSummary, UsageResponse } from '@/
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export function OverviewPage() {
+  const navigate = useNavigate();
   // Stabilize `since` across re-renders so the /api/usage queryKey doesn't
   // shift each tick and trigger needless refetches. Once-per-mount is fine
   // for a 24h aggregate.
@@ -73,16 +75,16 @@ export function OverviewPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="MCP Servers" value={servers.length} icon={Server} tone="primary" />
-        <StatCard label="Registered Tools" value={toolTotal} icon={Wrench} tone="default" />
-        <StatCard label="Tool Groups" value={groupCount} icon={LayoutGrid} tone="success" />
-        <StatCard label="Tool calls (24h)" value={reqTotal.toLocaleString()} icon={Zap} tone="warning" />
+        <StatCard label="MCP Servers" value={servers.length} icon={Server} tone="primary" to="/servers" />
+        <StatCard label="Registered Tools" value={toolTotal} icon={Wrench} tone="default" to="/tools" />
+        <StatCard label="Tool Groups" value={groupCount} icon={LayoutGrid} tone="success" to="/groups" />
+        <StatCard label="Tool calls (24h)" value={reqTotal.toLocaleString()} icon={Zap} tone="warning" to="/usage" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Open circuits" value={openCircuits} icon={ZapOff} tone={openCircuits > 0 ? 'danger' : 'default'} />
-        <StatCard label="Redaction findings (24h)" value={findings24h.toLocaleString()} icon={ShieldAlert} tone={findings24h > 0 ? 'warning' : 'default'} />
-        <StatCard label="Catalog updates available" value={updatesAvailable} icon={Boxes} tone={updatesAvailable > 0 ? 'warning' : 'default'} />
+        <StatCard label="Open circuits" value={openCircuits} icon={ZapOff} tone={openCircuits > 0 ? 'danger' : 'default'} to="/circuits" />
+        <StatCard label="Redaction findings (24h)" value={findings24h.toLocaleString()} icon={ShieldAlert} tone={findings24h > 0 ? 'warning' : 'default'} to="/redaction" />
+        <StatCard label="Catalog updates available" value={updatesAvailable} icon={Boxes} tone={updatesAvailable > 0 ? 'warning' : 'default'} to="/catalog" />
       </div>
 
       <Card>
@@ -126,7 +128,11 @@ export function OverviewPage() {
               </TableHeader>
               <TableBody>
                 {servers.map((s) => (
-                  <TableRow key={s.name}>
+                  <TableRow
+                    key={s.name}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/servers/${encodeURIComponent(s.name)}`)}
+                  >
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell><Badge variant="secondary">{s.tools.length} tools</Badge></TableCell>
                     <TableCell>
