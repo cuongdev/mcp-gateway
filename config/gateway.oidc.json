@@ -1,5 +1,5 @@
 {
-  "_comment": "Enterprise (production) mode with an OIDC provider. Secrets/IDs are injected from env vars (${...}) so this file is safe to commit. Provide them via a gitignored .env.local and run: set -a && source .env.local && set +a && GATEWAY_CONFIG=./config/gateway.oidc.json npm start. Register the redirect URI <publicUrl>/auth/callback/azure in your IdP. authorization is OFF so any authenticated user is treated as admin — turn it on + add role bindings (config/policy.csv) for real RBAC.",
+  "_comment": "Enterprise (production) mode with an OIDC provider. Secrets/IDs are injected from env vars (${...}) so this file is safe to commit. Provide them via a gitignored .env.local and run: set -a && source .env.local && set +a && GATEWAY_CONFIG=./config/gateway.oidc.json npm start. Register the redirect URI <publicUrl>/auth/callback/azure in your IdP. authorization (Casbin RBAC) is ON; roles/bindings live in storage — seed them with: mcp-gateway migrate seed --from ./config/gateway.oidc.json --policy ./config/policy.csv --force. Grant a user admin with a `g, <email>, admin` binding.",
   "mode": "enterprise",
   "gateway": {
     "port": 3100,
@@ -10,7 +10,7 @@
   },
   "servers": [],
   "groups": [],
-  "authorization": { "enabled": false },
+  "authorization": { "enabled": true, "modelFile": "./config/policy.model.conf", "policyFile": "./config/policy.csv", "defaultDecision": "deny" },
   "auth": {
     "sessionCookieSecret": "${GATEWAY_SESSION_SECRET}"
   },
