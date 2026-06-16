@@ -37,9 +37,10 @@ test('seeded group appears as a card on the Groups page', async ({ page, api }) 
 });
 
 test('create a tool group through the Create Group sheet', async ({ page, api }) => {
-  // The Create button is disabled unless at least one tool chip is added, and
-  // the tool must exist (FK). Seed a real discovered tool first.
+  // The Create button is disabled until a tool is selected, and the tool must
+  // exist (FK). Seed a real discovered tool first.
   const tool = await seedRealTool(api);
+  const original = tool.slice(tool.indexOf('__') + 2);
   const name = uid('grp-ui');
   // Register cleanup — the UI-created group has no typed helper so we use generic del.
   api.onCleanup(async () => {
@@ -54,10 +55,11 @@ test('create a tool group through the Create Group sheet', async ({ page, api })
   await page.getByLabel('Name').fill(name);
   await page.getByLabel('Description').fill('Created via E2E');
 
-  // ChipInput for tools — type a real canonical name and press Enter to commit a chip
-  const toolsInput = page.getByRole('textbox', { name: 'tools' });
-  await toolsInput.fill(tool);
-  await toolsInput.press('Enter');
+  // Tool picker — search the canonical name (auto-expands its server), then
+  // tick the tool's checkbox via its row label.
+  await page.getByPlaceholder('Search tools or servers…').fill(tool);
+  await page.locator('label').filter({ hasText: original }).first().click();
+  await expect(page.getByText('1 tool selected')).toBeVisible({ timeout: 5_000 });
 
   await page.getByRole('button', { name: 'Create' }).click();
 

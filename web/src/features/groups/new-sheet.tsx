@@ -6,7 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChipInput } from '@/components/chip-input';
+import { ToolPicker, RolePicker } from './pickers';
 import { useCreateGroup } from './api';
 
 export function GroupNewSheet() {
@@ -28,7 +28,7 @@ export function GroupNewSheet() {
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) close(); }}>
-      <SheetContent className="flex flex-col gap-0 sm:max-w-md">
+      <SheetContent className="flex flex-col gap-0 sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Create Tool Group</SheetTitle>
           <SheetDescription>Define a curated set of tools, exposed at /mcp/groups/&lt;name&gt;.</SheetDescription>
@@ -44,13 +44,13 @@ export function GroupNewSheet() {
             <Input id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Read-only data tools" />
           </div>
           <div className="space-y-1.5">
-            <Label>Tools (canonical names)</Label>
-            <ChipInput value={tools} onChange={setTools} placeholder="db__query, fs__read_file" ariaLabel="tools" />
-            <p className="text-xs text-muted-foreground">Add tools by their canonical <code className="font-mono">server__tool</code> name.</p>
+            <Label>Tools</Label>
+            <ToolPicker value={tools} onChange={setTools} />
+            <p className="text-xs text-muted-foreground">Search and pick tools by MCP server. Selected as canonical <code className="font-mono">server__tool</code> names.</p>
           </div>
           <div className="space-y-1.5">
             <Label>Allowed roles (empty = all)</Label>
-            <ChipInput value={allowedRoles} onChange={setAllowedRoles} placeholder="analyst, admin" ariaLabel="roles" />
+            <RolePicker value={allowedRoles} onChange={setAllowedRoles} />
           </div>
         </div>
 

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChipInput } from '@/components/chip-input';
 import { ConfirmDestructive } from '@/components/confirm-destructive';
 import { CopyButton } from '@/components/copy-button';
+import { ToolPicker, RolePicker } from './pickers';
 import { useDeleteGroup, useGroup, usePatchGroup } from './api';
 
 export function GroupDetailSheet() {
@@ -78,9 +79,9 @@ export function GroupDetailSheet() {
             <TabsContent value="tools" className="mt-4 space-y-3">
               <Label>Description</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Read-only data tools" />
-              <Label>Tools (canonical names)</Label>
-              <ChipInput value={tools} onChange={setTools} placeholder="db__query, fs__read_file" ariaLabel="tools" />
-              <p className="text-xs text-muted-foreground">Explicit list of canonical tool names included in this group.</p>
+              <Label>Tools</Label>
+              <ToolPicker value={tools} onChange={setTools} />
+              <p className="text-xs text-muted-foreground">Explicit list of tools included in this group (search & pick by server).</p>
             </TabsContent>
 
             <TabsContent value="filters" className="mt-4 space-y-3">
@@ -92,7 +93,7 @@ export function GroupDetailSheet() {
 
             <TabsContent value="roles" className="mt-4 space-y-3">
               <Label>Allowed roles (empty = all roles)</Label>
-              <ChipInput value={allowedRoles} onChange={setRoles} placeholder="analyst, admin" ariaLabel="allowedRoles" />
+              <RolePicker value={allowedRoles} onChange={setRoles} />
             </TabsContent>
           </Tabs>
         </div>
