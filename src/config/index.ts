@@ -112,6 +112,29 @@ function applyModeDefaults(config: GatewayConfig): void {
     }
   }
 
+  // ── Session-cookie secret (dashboard login + OIDC callback) ──────
+  // Signs the dashboard session cookie. Without it, POST /auth/dev-login and
+  // the OIDC callback return 500. Default it the same way as session.secret
+  // above so dev-login works out of the box in development. This secret only
+  // signs the cookie — it does NOT gate the admin API in dev (requireAuthForApi
+  // stays false). In enterprise with oidcProviders the schema already requires
+  // it (so this only fills the no-OIDC enterprise case with an ephemeral one).
+  if (!config.auth.sessionCookieSecret) {
+    const envSecret = process.env["GATEWAY_SESSION_SECRET"];
+    if (envSecret && envSecret.length >= 32) {
+      config.auth.sessionCookieSecret = envSecret;
+    } else if (config.mode === "enterprise") {
+      config.auth.sessionCookieSecret = randomBytes(32).toString("hex");
+      log.warn(
+        "auth.sessionCookieSecret not set — generated an ephemeral cookie secret. " +
+        "Dashboard sessions will be invalidated on restart. Set GATEWAY_SESSION_SECRET in production!"
+      );
+    } else {
+      // Dev fixed secret
+      config.auth.sessionCookieSecret = "mcp-gateway-dev-cookie-secret-32-chars!!";
+    }
+  }
+
   if (config.mode === "development") {
     const hasOIDC = config.oidcProviders.length > 0;
     if (!hasOIDC) {
