@@ -1,9 +1,27 @@
-
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ExternalLink, Package } from 'lucide-react';
 import type { ConnectorTemplate, ConnectorCategory } from './types';
+
+/** Brand logo from the connector's iconSlug (Simple Icons CDN), with a graceful
+ *  fallback to a generic package glyph when the slug is missing or offline. */
+function BrandIcon({ slug }: { slug?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!slug || failed) return <Package className="h-5 w-5 flex-shrink-0 text-muted-foreground" />;
+  return (
+    <img
+      src={`https://cdn.simpleicons.org/${slug}`}
+      alt=""
+      width={20}
+      height={20}
+      loading="lazy"
+      className="h-5 w-5 flex-shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 const CATEGORY_LABEL: Record<ConnectorCategory, string> = {
   'developer-tools': 'Developer',
@@ -28,7 +46,7 @@ export function ConnectorCard({ template, installed, onInstall }: {
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <BrandIcon slug={template.iconSlug} />
             <span className="truncate">{template.displayName}</span>
           </CardTitle>
           <a href={template.docsUrl} target="_blank" rel="noreferrer"
