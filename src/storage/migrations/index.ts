@@ -31,6 +31,8 @@ const MIGRATIONS: Array<{ version: number; name: string; file: string; dialect: 
   { version: 8, name: 'p6_foundation', file: '0008_p6_foundation.postgres.sql', dialect: 'postgres' },
   { version: 9, name: 'p6_features', file: '0009_p6_features.sqlite.sql', dialect: 'sqlite' },
   { version: 9, name: 'p6_features', file: '0009_p6_features.postgres.sql', dialect: 'postgres' },
+  { version: 10, name: 'p11_group_allowed_users', file: '0010_p11_group_allowed_users.sqlite.sql', dialect: 'sqlite' },
+  { version: 10, name: 'p11_group_allowed_users', file: '0010_p11_group_allowed_users.postgres.sql', dialect: 'postgres' },
 ];
 
 export function listMigrations(dialect: 'sqlite' | 'postgres' = 'sqlite'): MigrationFile[] {

@@ -8,6 +8,7 @@ export interface ToolGroup {
   tools: string[];
   enabled: boolean;
   allowedRoles: string[];
+  allowedUsers: string[];
   createdAt: number;
   includedServers: string[];
   excludedTools: string[];
@@ -18,6 +19,7 @@ export interface ToolGroup {
 export interface CreateGroupOptions {
   description?: string;
   allowedRoles?: string[];
+  allowedUsers?: string[];
 }
 
 function toGroup(row: GroupRow): ToolGroup {
@@ -27,6 +29,7 @@ function toGroup(row: GroupRow): ToolGroup {
     tools: row.tools,
     enabled: row.enabled,
     allowedRoles: row.allowedRoles,
+    allowedUsers: row.allowedUsers ?? [],
     createdAt: row.createdAt,
     includedServers: row.includedServers ?? [],
     excludedTools: row.excludedTools ?? [],
@@ -64,6 +67,7 @@ export class ToolGroupManager {
       name,
       description: opts.description ?? '',
       allowedRoles: opts.allowedRoles ?? [],
+      allowedUsers: opts.allowedUsers ?? [],
       tools,
     });
     const g = toGroup(row);

@@ -262,14 +262,23 @@ export function createMCPRoutes(deps: MCPRouteDeps) {
       );
     }
 
-    // Check role access if group has allowedRoles
-    if (group.allowedRoles && group.allowedRoles.length > 0) {
+    // Access control: a group can gate by role (allowedRoles) and/or by direct
+    // user (allowedUsers, matched on email or principal id). When either gate is
+    // set, an authenticated caller must satisfy at least one. An unauthenticated
+    // caller passes (unchanged from the prior role-only behaviour).
+    const hasRoleGate = !!group.allowedRoles && group.allowedRoles.length > 0;
+    const hasUserGate = !!group.allowedUsers && group.allowedUsers.length > 0;
+    if (hasRoleGate || hasUserGate) {
       const user = c.get("user");
-      if (user && !group.allowedRoles.some((r) => user.roles.includes(r))) {
-        return c.json(
-          createErrorResponse(null, MCP_ERROR_CODES.INVALID_REQUEST, "Access denied for this tool group"),
-          403
-        );
+      if (user) {
+        const roleOk = hasRoleGate && group.allowedRoles.some((r) => user.roles.includes(r));
+        const userOk = hasUserGate && (group.allowedUsers.includes(user.email ?? "") || group.allowedUsers.includes(user.sub));
+        if (!roleOk && !userOk) {
+          return c.json(
+            createErrorResponse(null, MCP_ERROR_CODES.INVALID_REQUEST, "Access denied for this tool group"),
+            403
+          );
+        }
       }
     }
 

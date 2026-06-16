@@ -19,11 +19,11 @@ describe('migrate CLI', () => {
     try {
       let r = runCli(['migrate', 'up'], dbPath);
       expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(/Applied 9 migration/);
+      expect(r.stdout).toMatch(/Applied 10 migration/);
 
       r = runCli(['migrate', 'status'], dbPath);
       expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(/applied:\s*9/);
+      expect(r.stdout).toMatch(/applied:\s*10/);
       expect(r.stdout).toMatch(/pending:\s*0/);
     } finally {
       rmSync(dir, { recursive: true, force: true });

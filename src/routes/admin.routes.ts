@@ -637,6 +637,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       tools: string[];
       description?: string;
       allowedRoles?: string[];
+      allowedUsers?: string[];
       includedServers?: string[];
       excludedTools?: string[];
     };
@@ -649,6 +650,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       const group = await toolGroups.create(body.name, body.tools, {
         description: body.description,
         allowedRoles: body.allowedRoles,
+        allowedUsers: body.allowedUsers,
       });
 
       // Apply includedServers/excludedTools if provided
@@ -693,6 +695,7 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       includedServers?: string[];
       excludedTools?: string[];
       allowedRoles?: string[];
+      allowedUsers?: string[];
       description?: string;
       enabled?: boolean;
       proxyName?: string | null;
@@ -706,6 +709,15 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
     }
     if (body.excludedTools !== undefined) {
       await storage.groups.setExcludedTools(name, body.excludedTools);
+    }
+    if (body.allowedRoles !== undefined) {
+      await storage.groups.setAllowedRoles(name, body.allowedRoles);
+    }
+    if (body.allowedUsers !== undefined) {
+      await storage.groups.setAllowedUsers(name, body.allowedUsers);
+    }
+    if (body.description !== undefined) {
+      await storage.groups.setDescription(name, body.description);
     }
     if (body.proxyName !== undefined) {
       await storage.groups.setProxyName(name, body.proxyName);

@@ -5,6 +5,7 @@ export interface GroupRow {
   description: string;
   enabled: boolean;
   allowedRoles: string[];
+  allowedUsers: string[];
   tools: string[];
   createdAt: number;
   includedServers?: string[];
@@ -16,6 +17,7 @@ export interface NewGroup {
   name: string;
   description: string;
   allowedRoles: string[];
+  allowedUsers?: string[];
   tools: string[];
 }
 
@@ -27,9 +29,9 @@ export class GroupRepo {
     // Sequential inserts (see T6 transaction note). If a group_tools insert fails
     // partway, the group row will exist with partial tools — caller can retry.
     await this.client.execute({
-      sql: `INSERT INTO groups(name, description, enabled, allowed_roles, created_at)
-            VALUES (?, ?, 1, ?, ?)`,
-      args: [g.name, g.description, JSON.stringify(g.allowedRoles), now],
+      sql: `INSERT INTO groups(name, description, enabled, allowed_roles, allowed_users, created_at)
+            VALUES (?, ?, 1, ?, ?, ?)`,
+      args: [g.name, g.description, JSON.stringify(g.allowedRoles), JSON.stringify(g.allowedUsers ?? []), now],
     });
     for (const t of g.tools) {
       await this.client.execute({
@@ -39,13 +41,13 @@ export class GroupRepo {
     }
     return {
       name: g.name, description: g.description, enabled: true,
-      allowedRoles: g.allowedRoles, tools: g.tools, createdAt: now,
+      allowedRoles: g.allowedRoles, allowedUsers: g.allowedUsers ?? [], tools: g.tools, createdAt: now,
     };
   }
 
   async findByName(name: string): Promise<GroupRow | null> {
     const r = await this.client.execute({
-      sql: `SELECT name, description, enabled, allowed_roles, created_at, proxy_name
+      sql: `SELECT name, description, enabled, allowed_roles, allowed_users, created_at, proxy_name
             FROM groups WHERE name = ?`,
       args: [name],
     });
@@ -67,6 +69,7 @@ export class GroupRepo {
       description: (r.rows[0].description as string | null) ?? '',
       enabled: Number(r.rows[0].enabled) === 1,
       allowedRoles: JSON.parse(r.rows[0].allowed_roles as string),
+      allowedUsers: JSON.parse((r.rows[0].allowed_users as string | null) ?? '[]'),
       tools: tools.rows.map((t) => t.canonical_name as string),
       createdAt: Number(r.rows[0].created_at),
       includedServers: included.rows.map((s) => s.server_name as string),
@@ -123,6 +126,27 @@ export class GroupRepo {
     await this.client.execute({
       sql: 'UPDATE groups SET proxy_name = ? WHERE name = ?',
       args: [proxyName, name],
+    });
+  }
+
+  async setAllowedRoles(name: string, roles: string[]): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE groups SET allowed_roles = ? WHERE name = ?',
+      args: [JSON.stringify(roles), name],
+    });
+  }
+
+  async setAllowedUsers(name: string, users: string[]): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE groups SET allowed_users = ? WHERE name = ?',
+      args: [JSON.stringify(users), name],
+    });
+  }
+
+  async setDescription(name: string, description: string): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE groups SET description = ? WHERE name = ?',
+      args: [description, name],
     });
   }
 }

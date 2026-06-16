@@ -1,0 +1,1 @@
+ALTER TABLE groups ADD COLUMN allowed_users TEXT NOT NULL DEFAULT '[]';
