@@ -1,0 +1,27 @@
+{
+  "_comment": "Enterprise (production) mode with an OIDC provider. Secrets/IDs are injected from env vars (${...}) so this file is safe to commit. Provide them via a gitignored .env.local and run: set -a && source .env.local && set +a && GATEWAY_CONFIG=./config/gateway.oidc.json npm start. Register the redirect URI <publicUrl>/auth/callback/azure in your IdP. authorization is OFF so any authenticated user is treated as admin — turn it on + add role bindings (config/policy.csv) for real RBAC.",
+  "mode": "enterprise",
+  "gateway": {
+    "port": 3100,
+    "host": "0.0.0.0",
+    "publicUrl": "http://localhost:3100",
+    "apiPath": "/api",
+    "mcpPath": "/mcp"
+  },
+  "servers": [],
+  "groups": [],
+  "authorization": { "enabled": false },
+  "auth": {
+    "sessionCookieSecret": "${GATEWAY_SESSION_SECRET}"
+  },
+  "oidcProviders": [
+    {
+      "id": "azure",
+      "name": "Microsoft",
+      "discoveryUrl": "https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0/.well-known/openid-configuration",
+      "clientId": "${AZURE_CLIENT_ID}",
+      "clientSecret": "${AZURE_CLIENT_SECRET}",
+      "scopes": ["openid", "profile", "email"]
+    }
+  ]
+}
