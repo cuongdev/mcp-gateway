@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Plus, Server as ServerIcon } from 'lucide-react';
+import { Plus, Download, Server as ServerIcon } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -78,9 +78,14 @@ export function ServersPage() {
           <h1 className="text-2xl font-bold">Servers</h1>
           <p className="mt-1 text-sm text-muted-foreground">Register and manage upstream MCP servers</p>
         </div>
-        <Button onClick={() => navigate('/servers/new')}>
-          <Plus className="h-4 w-4" /> Register Server
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => navigate('/servers/import')}>
+            <Download className="h-4 w-4" /> Import
+          </Button>
+          <Button onClick={() => navigate('/servers/new')}>
+            <Plus className="h-4 w-4" /> Register Server
+          </Button>
+        </div>
       </div>
 
       {isLoading ? null : servers.length === 0 ? (

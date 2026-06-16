@@ -11,6 +11,7 @@ const OverviewPage = lazy(() => import('@/features/overview/page').then((m) => (
 const ServersPage = lazy(() => import('@/features/servers/page').then((m) => ({ default: m.ServersPage })));
 const ServerNewSheet = lazy(() => import('@/features/servers/new-sheet').then((m) => ({ default: m.ServerNewSheet })));
 const ServerDetailSheet = lazy(() => import('@/features/servers/detail-sheet').then((m) => ({ default: m.ServerDetailSheet })));
+const ServerImportSheet = lazy(() => import('@/features/servers/import-sheet').then((m) => ({ default: m.ServerImportSheet })));
 
 const ToolsPage = lazy(() => import('@/features/tools/page').then((m) => ({ default: m.ToolsPage })));
 const ToolDetailSheet = lazy(() => import('@/features/tools/detail-sheet').then((m) => ({ default: m.ToolDetailSheet })));
@@ -95,6 +96,7 @@ export function App() {
                 {/* ROUTING */}
                 <Route path="/servers" element={<ServersPage />}>
                   <Route path="new" element={<ServerNewSheet />} />
+                  <Route path="import" element={<ServerImportSheet />} />
                   <Route path=":name" element={<ServerDetailSheet />} />
                 </Route>
                 <Route path="/tools" element={<ToolsPage />}>

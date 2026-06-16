@@ -29,6 +29,47 @@ export function useRegisterServer() {
   });
 }
 
+export interface ImportedServer {
+  name: string;
+  transport: { type: string; command?: string; url?: string; args?: string[]; env?: Record<string, string>; headers?: Record<string, string> };
+  warnings: string[];
+}
+export interface ImportPreview {
+  source: string | null;
+  servers: ImportedServer[];
+  warnings: string[];
+}
+export interface ImportResults {
+  source: string | null;
+  results: Array<{ name: string; ok: boolean; tools?: string[]; warning?: string; error?: string }>;
+  warnings: string[];
+}
+
+/** Dry-run: parse a client config and return the detected servers for preview. */
+export function useImportPreview() {
+  return useMutation({
+    mutationFn: (config: string) => apiPost<ImportPreview>('/api/servers/import', { config, dryRun: true }),
+    onError: (e: Error) => toast.error(`Parse failed: ${e.message}`),
+  });
+}
+
+/** Register the selected servers from a client config. */
+export function useImportServers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { config: string; only: string[] }) =>
+      apiPost<ImportResults>('/api/servers/import', { config: input.config, only: input.only }),
+    onSuccess: (data) => {
+      const okCount = data.results.filter((r) => r.ok).length;
+      const failCount = data.results.length - okCount;
+      toast.success(`Imported ${okCount} server${okCount === 1 ? '' : 's'}${failCount ? `, ${failCount} failed` : ''}`);
+      qc.invalidateQueries({ queryKey: queryKeys.servers });
+      qc.invalidateQueries({ queryKey: queryKeys.tools() });
+    },
+    onError: (e: Error) => toast.error(`Import failed: ${e.message}`),
+  });
+}
+
 export function useSyncServer() {
   const qc = useQueryClient();
   return useMutation({
