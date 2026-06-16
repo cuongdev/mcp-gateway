@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTools } from '@/features/tools/api';
+import { useServers } from '@/features/servers/api';
 
 /**
  * Searchable tool picker grouped by MCP server (a sub-tree). Each server can be
@@ -109,6 +110,40 @@ export function ToolPicker({ value, onChange }: { value: string[]; onChange: (v:
       <div className="border-t border-border p-2 text-xs text-muted-foreground">
         {value.length} tool{value.length === 1 ? '' : 's'} selected
       </div>
+    </div>
+  );
+}
+
+/**
+ * Server chips — toggle the registered MCP servers. Used for a group's
+ * `includedServers` (auto-expand every tool from the chosen servers).
+ */
+export function ServerPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { data } = useServers();
+  const servers = useMemo(() => (data?.servers ?? []).map((s) => s.name).sort(), [data]);
+  const sel = new Set(value);
+  const toggle = (n: string) => {
+    const next = new Set(sel);
+    if (next.has(n)) next.delete(n);
+    else next.add(n);
+    onChange([...next]);
+  };
+  if (servers.length === 0) return <p className="text-xs text-muted-foreground">No servers registered.</p>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {servers.map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => toggle(n)}
+          className={cn(
+            'rounded-full border px-2.5 py-1 font-mono text-xs transition-colors',
+            sel.has(n) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {n}
+        </button>
+      ))}
     </div>
   );
 }

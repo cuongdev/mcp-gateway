@@ -8,10 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChipInput } from '@/components/chip-input';
 import { ConfirmDestructive } from '@/components/confirm-destructive';
 import { CopyButton } from '@/components/copy-button';
-import { ToolPicker, RolePicker } from './pickers';
+import { ToolPicker, RolePicker, ServerPicker } from './pickers';
 import { useDeleteGroup, useGroup, usePatchGroup } from './api';
 
 export function GroupDetailSheet() {
@@ -86,9 +85,9 @@ export function GroupDetailSheet() {
 
             <TabsContent value="filters" className="mt-4 space-y-3">
               <Label>Included servers (auto-expand all tools from these servers)</Label>
-              <ChipInput value={includedServers} onChange={setIncluded} placeholder="db, github" ariaLabel="includedServers" />
+              <ServerPicker value={includedServers} onChange={setIncluded} />
               <Label>Excluded tools (subtract from the expanded set)</Label>
-              <ChipInput value={excludedTools} onChange={setExcluded} placeholder="github__delete_repo" ariaLabel="excludedTools" />
+              <ToolPicker value={excludedTools} onChange={setExcluded} />
             </TabsContent>
 
             <TabsContent value="roles" className="mt-4 space-y-3">
