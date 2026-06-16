@@ -15,6 +15,7 @@ import { RolePicker } from '@/features/groups/pickers';
 import { useRoleBindings, useAddRole, useRemoveRole } from '@/features/policies/api';
 import { useGroups, usePatchGroup } from '@/features/groups/api';
 import { useDeleteUser, usePatchUser, useUsers } from './api';
+import { accessibleGroups, accessibleToolNames } from './access';
 
 export function UserDetailSheet() {
   const navigate = useNavigate();
@@ -60,6 +61,10 @@ export function UserDetailSheet() {
     );
   }
 
+  // Effective access (role-matched + direct + open groups) for the summary.
+  const accGroups = accessibleGroups(groups, { email: user.email, principalId: user.principalId, roles: userRoles });
+  const accToolCount = accessibleToolNames(accGroups).length;
+
   return (
     <Sheet open onOpenChange={(o) => { if (!o) close(); }}>
       <SheetContent className="flex flex-col gap-0 sm:max-w-md">
@@ -76,6 +81,21 @@ export function UserDetailSheet() {
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-1 py-4">
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Access summary</h3>
+            <p className="text-xs text-muted-foreground">
+              Belongs to <span className="font-medium text-foreground">{accGroups.length}</span> group{accGroups.length === 1 ? '' : 's'}
+              {' · can access '}<span className="font-medium text-foreground">{accToolCount}</span> tool{accToolCount === 1 ? '' : 's'}.
+            </p>
+            {accGroups.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {accGroups.map((g) => <Badge key={g.name} variant="secondary" className="font-mono text-[10px]">{g.name}</Badge>)}
+              </div>
+            )}
+          </section>
+
+          <Separator />
+
           <section className="flex items-center justify-between">
             <Label htmlFor="enabled" className="flex flex-col">
               <span>Active</span>
