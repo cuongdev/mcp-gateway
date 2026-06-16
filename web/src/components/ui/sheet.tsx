@@ -78,13 +78,17 @@ const SheetContent = React.forwardRef<
 ))
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
+// Header/footer stick to the top/bottom of the scrolling SheetContent so they
+// stay visible when a long modal body scrolls. The negative margins bleed over
+// the SheetContent's `p-6` padding so the solid background covers scrolled
+// content edge-to-edge; the border separates them from the body.
 const SheetHeader = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col space-y-2 text-center sm:text-left",
+      "sticky top-0 z-10 -mx-6 -mt-6 mb-2 flex flex-col space-y-2 border-b border-border/60 bg-background px-6 pb-3 pt-6 text-center sm:text-left",
       className
     )}
     {...props}
@@ -98,7 +102,7 @@ const SheetFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      "sticky bottom-0 z-10 -mx-6 -mb-6 mt-2 flex flex-col-reverse border-t border-border/60 bg-background px-6 pb-6 pt-3 sm:flex-row sm:justify-end sm:space-x-2",
       className
     )}
     {...props}
