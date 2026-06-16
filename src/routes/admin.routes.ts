@@ -64,6 +64,7 @@ import { createSamplingLogRoutes } from "./admin/sampling-log.routes.js";
 import { createCapabilitiesRoutes } from "./admin/capabilities.routes.js";
 import { createCatalogRoutes } from "./admin/catalog.routes.js";
 import { createVirtualToolsRoutes } from "./admin/virtual-tools.routes.js";
+import { parseMcpImport } from "../import/mcp-config.js";
 import type { ToolCache } from "../cache/interface.js";
 import type { ProxyRegistry } from "../proxy/registry.js";
 import type { RedactionEngineFactory } from "../redaction/factory.js";
@@ -110,6 +111,50 @@ interface AdminRouteDeps {
 export function createAdminRoutes(deps: AdminRouteDeps) {
   const app = new Hono<{ Variables: GatewayVariables }>();
   const { config, storage, toolRegistry, toolGroups, sessionManager, policyEngine } = deps;
+
+  /**
+   * Persist + register an stdio / streamable-http / sse server and discover
+   * its tools, prompts, and resources. Shared by POST /servers and the import
+   * endpoint. Throws only when persistence fails; a discovery failure resolves
+   * with a `warning` (the server is still registered).
+   */
+  async function registerHttpOrStdioServer(
+    name: string,
+    transport: TransportConfig,
+  ): Promise<{ tools: string[]; warning?: string }> {
+    await storage.servers.upsert({
+      name,
+      transportType: transport.type as ServerTransportType,
+      transportConfig: transport as unknown as Record<string, unknown>,
+    });
+    sessionManager.register(name, transport);
+    try {
+      const tools = await sessionManager.discoverTools(name);
+      await toolRegistry.registerServerTools(name, tools);
+      try {
+        const prompts = await sessionManager.discoverPrompts(name);
+        await deps.promptRegistry.registerServerPrompts(
+          name,
+          prompts.map((p) => ({ name: p.originalName, description: p.description, argumentsSchema: p.argumentsSchema })),
+        );
+      } catch {
+        log.warn({ server: name }, "Prompt discovery failed (server may not support prompts/list)");
+      }
+      if (deps.resourceRegistry) {
+        try {
+          const resources = await sessionManager.discoverResources(name);
+          await deps.resourceRegistry.registerServerResources(name, resources);
+        } catch {
+          log.warn({ server: name }, "Resource discovery failed (server may not support resources/list)");
+        }
+      }
+      log.info({ server: name, toolCount: tools.length }, "Server registered and tools discovered");
+      return { tools: tools.map((t: any) => `${name}__${t.name}`) };
+    } catch (err) {
+      log.error({ server: name, err }, "Failed to discover tools");
+      return { tools: [], warning: "Server registered but tool discovery failed" };
+    }
+  }
 
   // ═══════════════════════════════════════════════════════
   // Health & Monitoring
@@ -314,14 +359,10 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       }, 201);
     }
 
-    // ── Stdio / Streamable-HTTP branch ────────────────
-    // Persist to storage so the server survives restarts.
+    // ── Stdio / Streamable-HTTP / SSE branch ──────────
+    let result: { tools: string[]; warning?: string };
     try {
-      await storage.servers.upsert({
-        name: body.name,
-        transportType: body.transport.type as ServerTransportType,
-        transportConfig: body.transport as unknown as Record<string, unknown>,
-      });
+      result = await registerHttpOrStdioServer(body.name, body.transport as TransportConfig);
       if (body.proxyName !== undefined) {
         await storage.servers.setProxyName(body.name, body.proxyName);
       }
@@ -329,66 +370,42 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
       log.error({ server: body.name, err }, "Failed to persist server");
       return c.json({ error: "Failed to persist server" }, 500);
     }
+    return c.json({
+      server: body.name,
+      tools: result.tools,
+      ...(result.warning ? { warning: result.warning } : {}),
+    }, 201);
+  });
 
-    // Register session
-    sessionManager.register(body.name, body.transport);
+  /**
+   * Import MCP servers from a client config (Claude Desktop, Cursor, VS Code,
+   * Antigravity, Windsurf, …). Body: { config: object|string, dryRun?, only?: string[] }.
+   * With dryRun the parsed servers are returned for preview; otherwise the
+   * selected (or all) servers are registered, with a per-server result.
+   */
+  app.post("/servers/import", async (c) => {
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const parsed = parseMcpImport((body as any).config ?? body);
 
-    // Discover tools from the server (initialize handshake + tools/list)
-    try {
-      const tools = await sessionManager.discoverTools(body.name);
-      await toolRegistry.registerServerTools(body.name, tools);
-
-      log.info(
-        { server: body.name, toolCount: tools.length },
-        "Server registered and tools discovered"
-      );
-
-      // Discover prompts — swallow errors quietly (server may not support prompts/list)
-      try {
-        const prompts = await deps.sessionManager.discoverPrompts(body.name);
-        await deps.promptRegistry.registerServerPrompts(
-          body.name,
-          prompts.map((p) => ({
-            name: p.originalName,
-            description: p.description,
-            argumentsSchema: p.argumentsSchema,
-          })),
-        );
-        log.info(
-          { server: body.name, promptCount: prompts.length },
-          "Prompts discovered"
-        );
-      } catch {
-        // warn-level noop — many servers don't support prompts/list
-        log.warn({ server: body.name }, "Prompt discovery failed (server may not support prompts/list)");
-      }
-
-      // Discover resources — swallow errors quietly (server may not support resources/list)
-      if (deps.resourceRegistry) {
-        try {
-          const resources = await sessionManager.discoverResources(body.name);
-          await deps.resourceRegistry.registerServerResources(body.name, resources);
-          log.info(
-            { server: body.name, resourceCount: resources.length },
-            "Resources discovered"
-          );
-        } catch {
-          log.warn({ server: body.name }, "Resource discovery failed (server may not support resources/list)");
-        }
-      }
-
-      return c.json({
-        server: body.name,
-        tools: tools.map((t: any) => `${body.name}__${t.name}`),
-      }, 201);
-    } catch (err) {
-      log.error({ server: body.name, err }, "Failed to discover tools");
-      return c.json({
-        server: body.name,
-        tools: [],
-        warning: "Server registered but tool discovery failed",
-      }, 201);
+    if ((body as any).dryRun) {
+      return c.json({ source: parsed.source, servers: parsed.servers, warnings: parsed.warnings });
     }
+
+    const only: string[] | undefined = Array.isArray((body as any).only)
+      ? ((body as any).only as string[])
+      : undefined;
+    const toImport = parsed.servers.filter((s) => !only || only.includes(s.name));
+
+    const results: Array<{ name: string; ok: boolean; tools?: string[]; warning?: string; error?: string }> = [];
+    for (const s of toImport) {
+      try {
+        const res = await registerHttpOrStdioServer(s.name, s.transport as TransportConfig);
+        results.push({ name: s.name, ok: true, tools: res.tools, ...(res.warning ? { warning: res.warning } : {}) });
+      } catch (err) {
+        results.push({ name: s.name, ok: false, error: (err as Error).message });
+      }
+    }
+    return c.json({ source: parsed.source, results, warnings: parsed.warnings }, 201);
   });
 
   /** Deregister a server */
