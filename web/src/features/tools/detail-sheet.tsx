@@ -12,7 +12,24 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { CopyButton } from '@/components/copy-button';
-import { useTools, usePatchTool, useToggleTool, useCallTool } from './api';
+import { cn } from '@/lib/utils';
+import { useTools, usePatchTool, useToggleTool, useCallTool, type ToolCallResult } from './api';
+
+/** Render a tools/call result readably: unwrap MCP text blocks, pretty-print
+ *  any embedded JSON, and wrap long lines instead of scrolling horizontally. */
+function ToolResultView({ data }: { data: ToolCallResult }) {
+  const base = 'max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-2 font-mono text-[11px]';
+  if (data.error) {
+    return <pre className={cn(base, 'border-rose-300 text-rose-700')}>{JSON.stringify(data.error, null, 2)}</pre>;
+  }
+  const result = data.result as { content?: Array<{ type?: string; text?: string }>; isError?: boolean } | null;
+  const blocks = Array.isArray(result?.content) ? result!.content : null;
+  const pretty = (s: string) => { try { return JSON.stringify(JSON.parse(s), null, 2); } catch { return s; } };
+  const body = blocks && blocks.length
+    ? blocks.map((b) => (b.text != null ? pretty(b.text) : JSON.stringify(b, null, 2))).join('\n')
+    : JSON.stringify(result, null, 2);
+  return <pre className={cn(base, result?.isError && 'border-rose-300 text-rose-700')}>{body}</pre>;
+}
 
 export function ToolDetailSheet() {
   const navigate = useNavigate();
@@ -176,9 +193,7 @@ export function ToolDetailSheet() {
             {call.data && (
               <div className="space-y-1">
                 <Label className="text-xs">{call.data.error ? 'Error' : 'Result'}</Label>
-                <pre className="max-h-60 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px]">
-                  {JSON.stringify(call.data.error ?? call.data.result, null, 2)}
-                </pre>
+                <ToolResultView data={call.data} />
               </div>
             )}
           </section>

@@ -13,8 +13,8 @@ test('test-call a discovered tool from the tool detail sheet', async ({ page, ap
 
   await page.getByRole('button', { name: 'Run' }).click();
 
-  // Result panel renders the upstream tools/call response.
-  await expect(page.locator('pre').filter({ hasText: '"text": "ok"' })).toBeVisible({ timeout: 8_000 });
+  // Result panel renders the upstream tools/call response (mock returns "ok").
+  await expect(page.locator('pre').filter({ hasText: 'ok' })).toBeVisible({ timeout: 8_000 });
 });
 
 test('server detail lists discovered tools and links to the tool detail', async ({ page, api }) => {
