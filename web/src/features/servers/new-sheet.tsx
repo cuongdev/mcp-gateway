@@ -5,6 +5,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -22,9 +23,11 @@ interface FormState {
   // HTTP / SSE
   url: string;
   bearerToken: string;
+  headers: string;
   // stdio
   command: string;
   args: string;
+  env: string;
   stateful: boolean;
   // openapi
   specUrl: string;
@@ -41,8 +44,10 @@ const empty: FormState = {
   type: 'streamable-http',
   url: '',
   bearerToken: '',
+  headers: '',
   command: '',
   args: '',
+  env: '',
   stateful: false,
   specUrl: '',
   specPath: '',
@@ -53,13 +58,29 @@ const empty: FormState = {
   excludeOps: [],
 };
 
+/** Parse a textarea of "key<sep>value" lines into an object (or undefined if empty). */
+function parseKeyVals(text: string, sep: '=' | ':'): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const i = t.indexOf(sep);
+    if (i < 0) continue;
+    const k = t.slice(0, i).trim();
+    if (k) out[k] = t.slice(i + 1).trim();
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function buildTransport(f: FormState): ServerTransport {
   if (f.type === 'stdio') {
+    const env = parseKeyVals(f.env, '=');
     return {
       type: 'stdio',
       command: f.command,
       args: f.args.split(/\s+/).filter(Boolean),
       stateful: f.stateful,
+      ...(env ? { env } : {}),
     };
   }
   if (f.type === 'openapi') {
@@ -80,10 +101,12 @@ function buildTransport(f: FormState): ServerTransport {
         : {}),
     };
   }
+  const headers = parseKeyVals(f.headers, ':');
   return {
     type: f.type,
     url: f.url,
     ...(f.bearerToken ? { bearerToken: f.bearerToken } : {}),
+    ...(headers ? { headers } : {}),
     timeout: 30000,
   };
 }
@@ -148,6 +171,20 @@ export function ServerNewSheet() {
                 <Label htmlFor="bearer">Bearer token (optional)</Label>
                 <Input id="bearer" value={f.bearerToken} onChange={(e) => set({ ...f, bearerToken: e.target.value })} placeholder="upstream-secret" type="password" />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="headers">Headers (optional)</Label>
+                <Textarea
+                  id="headers"
+                  value={f.headers}
+                  onChange={(e) => set({ ...f, headers: e.target.value })}
+                  placeholder={'X-API-Key: abc123\nX-Org: acme'}
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  One <code>Name: value</code> per line. Forwarded to the upstream on every request.
+                </p>
+              </div>
             </>
           )}
 
@@ -160,6 +197,20 @@ export function ServerNewSheet() {
               <div className="space-y-1.5">
                 <Label htmlFor="args">Arguments</Label>
                 <Input id="args" value={f.args} onChange={(e) => set({ ...f, args: e.target.value })} placeholder="./server.js --port 8001" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="env">Environment variables (optional)</Label>
+                <Textarea
+                  id="env"
+                  value={f.env}
+                  onChange={(e) => set({ ...f, env: e.target.value })}
+                  placeholder={'GITHUB_TOKEN=ghp_xxx\nAPI_BASE_URL=https://api.example.com'}
+                  rows={3}
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  One <code>KEY=value</code> per line. Passed to the child process — use for credentials.
+                </p>
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="stateful" className="flex flex-col">
