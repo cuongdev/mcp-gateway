@@ -27,6 +27,7 @@ export function useCreateGroup() {
       description?: string;
       tools: string[];
       allowedRoles?: string[];
+      allowedUsers?: string[];
       includedServers?: string[];
       excludedTools?: string[];
     }) => apiPost<{ group: GroupDetail }>('/api/groups', body),
@@ -47,11 +48,12 @@ export function usePatchGroup() {
       includedServers?: string[];
       excludedTools?: string[];
       allowedRoles?: string[];
+      allowedUsers?: string[];
       description?: string;
     }) => apiPatch<{ group: GroupDetail }>(`/api/groups/${encodeURIComponent(input.name)}`, {
       tools: input.tools, includedServers: input.includedServers,
       excludedTools: input.excludedTools, allowedRoles: input.allowedRoles,
-      description: input.description,
+      allowedUsers: input.allowedUsers, description: input.description,
     }),
     onSuccess: (_d, input) => {
       toast.success(`"${input.name}" updated`);

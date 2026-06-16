@@ -69,6 +69,7 @@ export interface GroupDetail {
   tools: string[];
   enabled: boolean;
   allowedRoles: string[];
+  allowedUsers: string[];
   createdAt: number;
   includedServers: string[];
   excludedTools: string[];

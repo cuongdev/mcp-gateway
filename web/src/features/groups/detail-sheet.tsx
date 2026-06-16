@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConfirmDestructive } from '@/components/confirm-destructive';
 import { CopyButton } from '@/components/copy-button';
-import { ToolPicker, RolePicker, ServerPicker } from './pickers';
+import { ToolPicker, RolePicker, ServerPicker, UserPicker } from './pickers';
 import { useDeleteGroup, useGroup, usePatchGroup } from './api';
 
 export function GroupDetailSheet() {
@@ -27,6 +27,7 @@ export function GroupDetailSheet() {
   const [includedServers, setIncluded] = useState<string[]>([]);
   const [excludedTools, setExcluded] = useState<string[]>([]);
   const [allowedRoles, setRoles] = useState<string[]>([]);
+  const [allowedUsers, setUsers] = useState<string[]>([]);
 
   useEffect(() => {
     if (!data) return;
@@ -35,6 +36,7 @@ export function GroupDetailSheet() {
     setIncluded(data.group.includedServers);
     setExcluded(data.group.excludedTools);
     setRoles(data.group.allowedRoles);
+    setUsers(data.group.allowedUsers ?? []);
   }, [data]);
 
   if (!data) {
@@ -51,7 +53,7 @@ export function GroupDetailSheet() {
 
   const save = async () => {
     await patch.mutateAsync({
-      name, description, tools, includedServers, excludedTools, allowedRoles,
+      name, description, tools, includedServers, excludedTools, allowedRoles, allowedUsers,
     });
     close();
   };
@@ -93,6 +95,9 @@ export function GroupDetailSheet() {
             <TabsContent value="roles" className="mt-4 space-y-3">
               <Label>Allowed roles (empty = all roles)</Label>
               <RolePicker value={allowedRoles} onChange={setRoles} />
+              <Label className="pt-2">Allowed users (direct access)</Label>
+              <UserPicker value={allowedUsers} onChange={setUsers} />
+              <p className="text-xs text-muted-foreground">Grant specific users access directly, in addition to roles.</p>
             </TabsContent>
           </Tabs>
         </div>

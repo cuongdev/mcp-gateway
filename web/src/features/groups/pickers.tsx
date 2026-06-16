@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTools } from '@/features/tools/api';
 import { useServers } from '@/features/servers/api';
+import { useUsers } from '@/features/users/api';
 
 /**
  * Searchable tool picker grouped by MCP server (a sub-tree). Each server can be
@@ -142,6 +143,44 @@ export function ServerPicker({ value, onChange }: { value: string[]; onChange: (
           )}
         >
           {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * User chips — toggle which users have DIRECT access to a tool group
+ * (group.allowedUsers, matched by email). Options = registered users ∪ current
+ * selection (so externally-set identifiers still render).
+ */
+export function UserPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { data } = useUsers();
+  const options = useMemo(() => {
+    const emails = (data?.users ?? []).map((u) => u.email).filter(Boolean);
+    return [...new Set([...emails, ...value])].sort();
+  }, [data, value]);
+  const sel = new Set(value);
+  const toggle = (e: string) => {
+    const next = new Set(sel);
+    if (next.has(e)) next.delete(e);
+    else next.add(e);
+    onChange([...next]);
+  };
+  if (options.length === 0) return <p className="text-xs text-muted-foreground">No users registered.</p>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((e) => (
+        <button
+          key={e}
+          type="button"
+          onClick={() => toggle(e)}
+          className={cn(
+            'rounded-full border px-2.5 py-1 text-xs transition-colors',
+            sel.has(e) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+          )}
+        >
+          {e}
         </button>
       ))}
     </div>

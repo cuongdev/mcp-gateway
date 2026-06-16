@@ -12,6 +12,7 @@ import {
   useAddPolicy, useAddRole, usePolicies,
   useReloadPolicies, useRemovePolicy, useRemoveRole, useRoleBindings,
 } from './api';
+import { useUsers } from '@/features/users/api';
 import type { Policy, RoleBinding } from '@/types/api';
 
 export function PoliciesPage() {
@@ -114,6 +115,10 @@ function AddRoleForm() {
   const [user, setUser] = useState('');
   const [role, setRole] = useState('');
   const add = useAddRole();
+  const { data: usersData } = useUsers();
+  const { data: bindingsData } = useRoleBindings();
+  const userOptions = (usersData?.users ?? []).map((u) => u.email).filter(Boolean);
+  const roleOptions = [...new Set(['admin', 'analyst', 'user', 'guest', ...(bindingsData?.bindings ?? []).map((b) => b.role)])].sort();
   const submit = async () => {
     if (!user || !role) return;
     await add.mutateAsync({ user, role });
@@ -123,8 +128,16 @@ function AddRoleForm() {
     <div className="rounded-lg border border-border bg-card p-4">
       <h3 className="mb-3 text-sm font-medium">Assign role to user</h3>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-        <div className="space-y-1"><Label htmlFor="user">User</Label><Input id="user" value={user} onChange={(e) => setUser(e.target.value)} placeholder="alice@example.com" /></div>
-        <div className="space-y-1"><Label htmlFor="role">Role</Label><Input id="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="admin" /></div>
+        <div className="space-y-1">
+          <Label htmlFor="user">User</Label>
+          <Input id="user" list="role-user-options" value={user} onChange={(e) => setUser(e.target.value)} placeholder="alice@example.com" />
+          <datalist id="role-user-options">{userOptions.map((e) => <option key={e} value={e} />)}</datalist>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="role">Role</Label>
+          <Input id="role" list="role-name-options" value={role} onChange={(e) => setRole(e.target.value)} placeholder="admin" />
+          <datalist id="role-name-options">{roleOptions.map((r) => <option key={r} value={r} />)}</datalist>
+        </div>
         <div className="flex items-end">
           <Button onClick={submit} disabled={add.isPending || !user || !role}>Assign</Button>
         </div>

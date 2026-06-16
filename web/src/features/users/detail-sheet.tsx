@@ -10,6 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { CopyButton } from '@/components/copy-button';
 import { ConfirmDestructive } from '@/components/confirm-destructive';
+import { cn } from '@/lib/utils';
+import { RolePicker } from '@/features/groups/pickers';
+import { useRoleBindings, useAddRole, useRemoveRole } from '@/features/policies/api';
+import { useGroups, usePatchGroup } from '@/features/groups/api';
 import { useDeleteUser, usePatchUser, useUsers } from './api';
 
 export function UserDetailSheet() {
@@ -21,6 +25,30 @@ export function UserDetailSheet() {
   const user = data?.users.find((u) => u.principalId === id);
   const patch = usePatchUser();
   const del = useDeleteUser();
+
+  // Role bindings are keyed by the subject the gateway resolves at /auth/me:
+  // the user's email when present, else the principal id.
+  const subject = user ? (user.email || user.principalId) : '';
+  const { data: rb } = useRoleBindings();
+  const userRoles = (rb?.bindings ?? []).filter((b) => b.user === subject).map((b) => b.role);
+  const addRole = useAddRole();
+  const removeRole = useRemoveRole();
+  const onRolesChange = (next: string[]) => {
+    const cur = new Set(userRoles);
+    const nxt = new Set(next);
+    next.forEach((r) => { if (!cur.has(r)) addRole.mutate({ user: subject, role: r }); });
+    userRoles.forEach((r) => { if (!nxt.has(r)) removeRole.mutate({ user: subject, role: r }); });
+  };
+
+  // Direct group membership (group.allowedUsers), toggled from the user side.
+  const { data: groupsData } = useGroups();
+  const groups = groupsData?.groups ?? [];
+  const patchGroup = usePatchGroup();
+  const toggleGroup = (g: { name: string; allowedUsers?: string[] }) => {
+    const cur = g.allowedUsers ?? [];
+    const next = cur.includes(subject) ? cur.filter((u) => u !== subject) : [...cur, subject];
+    patchGroup.mutate({ name: g.name, allowedUsers: next });
+  };
 
   if (!user) {
     return (
@@ -55,6 +83,46 @@ export function UserDetailSheet() {
             </Label>
             <Switch id="enabled" checked={!user.disabled} disabled={patch.isPending}
               onCheckedChange={(checked) => patch.mutate({ id: user.principalId, disabled: !checked })} />
+          </section>
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Roles</h3>
+            <p className="text-xs text-muted-foreground">
+              Assign roles to this user. Roles grant access to tool groups (via each group's allowed roles).
+            </p>
+            <RolePicker value={userRoles} onChange={onRolesChange} />
+          </section>
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Tool groups (direct access)</h3>
+            <p className="text-xs text-muted-foreground">Grant this user direct access to specific tool groups (in addition to role-based access).</p>
+            {groups.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No tool groups yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {groups.map((g) => {
+                  const member = (g.allowedUsers ?? []).includes(subject);
+                  return (
+                    <button
+                      key={g.name}
+                      type="button"
+                      onClick={() => toggleGroup(g)}
+                      disabled={patchGroup.isPending}
+                      className={cn(
+                        'rounded-full border px-2.5 py-1 font-mono text-xs transition-colors',
+                        member ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted',
+                      )}
+                    >
+                      {g.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           <Separator />

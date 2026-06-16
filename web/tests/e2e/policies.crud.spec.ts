@@ -72,8 +72,8 @@ test('Role Bindings tab renders the Assign role to user form', async ({ page }) 
   // tabpanel itself (aria-labelledby points at the "Role Bindings" trigger).
   const panel = page.getByRole('tabpanel', { name: 'Role Bindings' });
   await expect(panel.getByText('Assign role to user')).toBeVisible();
-  await expect(panel.getByRole('textbox', { name: 'User' })).toBeVisible();
-  await expect(panel.getByRole('textbox', { name: 'Role' })).toBeVisible();
+  await expect(panel.getByRole('combobox', { name: 'User' })).toBeVisible();
+  await expect(panel.getByRole('combobox', { name: 'Role' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Assign' })).toBeVisible();
 });
 
@@ -98,8 +98,8 @@ test('add a role binding via the UI and it appears in the bindings table', async
   const panel = page.getByRole('tabpanel', { name: 'Role Bindings' });
   await expect(panel.getByText('Assign role to user')).toBeVisible();
 
-  await panel.getByRole('textbox', { name: 'User' }).fill(userPrincipal);
-  await panel.getByRole('textbox', { name: 'Role' }).fill(role);
+  await panel.getByRole('combobox', { name: 'User' }).fill(userPrincipal);
+  await panel.getByRole('combobox', { name: 'Role' }).fill(role);
   await panel.getByRole('button', { name: 'Assign' }).click();
 
   // Binding appears in the BindingsTable
@@ -107,5 +107,5 @@ test('add a role binding via the UI and it appears in the bindings table', async
   await expect(main.getByText(userPrincipal)).toBeVisible({ timeout: 10_000 });
   await expect(main.getByText(role)).toBeVisible();
   // Form fields cleared
-  await expect(panel.getByRole('textbox', { name: 'User' })).toHaveValue('');
+  await expect(panel.getByRole('combobox', { name: 'User' })).toHaveValue('');
 });
