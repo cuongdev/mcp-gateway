@@ -31,6 +31,7 @@ export interface ToolSummary {
   cacheTtlSec: number | null;
   cachePerPrincipal: boolean;
   sensitive: boolean;
+  inputSchema?: Record<string, unknown>;
 }
 
 export interface GroupSummary {

@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Play } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { CopyButton } from '@/components/copy-button';
-import { useTools, usePatchTool, useToggleTool } from './api';
+import { useTools, usePatchTool, useToggleTool, useCallTool } from './api';
 
 export function ToolDetailSheet() {
   const navigate = useNavigate();
@@ -22,6 +24,22 @@ export function ToolDetailSheet() {
 
   const toggle = useToggleTool();
   const patch = usePatchTool();
+  const call = useCallTool();
+
+  const [argsText, setArgsText] = useState('{}');
+  const [argsErr, setArgsErr] = useState<string | null>(null);
+
+  const runTest = () => {
+    let args: Record<string, unknown>;
+    try {
+      args = argsText.trim() ? JSON.parse(argsText) : {};
+    } catch (e) {
+      setArgsErr((e as Error).message);
+      return;
+    }
+    setArgsErr(null);
+    call.mutate({ name: tool!.name, args });
+  };
 
   const [cacheable, setCacheable] = useState(false);
   const [cacheTtlSec, setCacheTtlSec] = useState<string>('');
@@ -126,6 +144,43 @@ export function ToolDetailSheet() {
               <span className="text-xs font-normal text-muted-foreground">Skip caching and auditing args.</span>
             </Label>
             <Switch id="sensitive" checked={sensitive} onCheckedChange={setSensitive} />
+          </section>
+
+          <Separator />
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Test tool</h3>
+            {tool.inputSchema && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground">Input schema</summary>
+                <pre className="mt-1 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px]">
+                  {JSON.stringify(tool.inputSchema, null, 2)}
+                </pre>
+              </details>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="args">Arguments (JSON)</Label>
+              <Textarea
+                id="args"
+                value={argsText}
+                onChange={(e) => setArgsText(e.target.value)}
+                rows={4}
+                className="font-mono text-xs"
+                placeholder='{ "path": "/tmp" }'
+              />
+              {argsErr && <p className="text-xs text-rose-600">Invalid JSON: {argsErr}</p>}
+            </div>
+            <Button variant="secondary" size="sm" onClick={runTest} disabled={call.isPending}>
+              <Play className="h-4 w-4" /> {call.isPending ? 'Running…' : 'Run'}
+            </Button>
+            {call.data && (
+              <div className="space-y-1">
+                <Label className="text-xs">{call.data.error ? 'Error' : 'Result'}</Label>
+                <pre className="max-h-60 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px]">
+                  {JSON.stringify(call.data.error ?? call.data.result, null, 2)}
+                </pre>
+              </div>
+            )}
           </section>
         </div>
 

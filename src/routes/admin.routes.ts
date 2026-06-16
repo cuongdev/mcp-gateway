@@ -546,9 +546,36 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
         cacheTtlSec: t.cacheTtlSec,
         cachePerPrincipal: t.cachePerPrincipal,
         sensitive: t.sensitive,
+        inputSchema: t.inputSchema,
       })),
       total: tools.length,
     });
+  });
+
+  /** Test-call a tool through its upstream (admin playground). */
+  app.post("/tools/:name/call", async (c) => {
+    const name = decodeURIComponent(c.req.param("name"));
+    const tool = toolRegistry.get(name);
+    if (!tool) return c.json({ error: { code: "not_found", message: "Tool not found" } }, 404);
+
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const rawArgs = (body as Record<string, unknown>).arguments;
+    const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
+
+    try {
+      const resp = await sessionManager.send(tool.serverName, {
+        jsonrpc: "2.0",
+        id: `admin-call-${Date.now()}`,
+        method: "tools/call",
+        params: { name: tool.originalName, arguments: args },
+      });
+      if ((resp as { error?: unknown }).error) {
+        return c.json({ error: (resp as { error: unknown }).error }, 502);
+      }
+      return c.json({ result: (resp as { result?: unknown }).result ?? null });
+    } catch (err) {
+      return c.json({ error: { code: "upstream_error", message: (err as Error).message } }, 502);
+    }
   });
 
   /** Enable a tool */

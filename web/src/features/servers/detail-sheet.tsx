@@ -53,12 +53,26 @@ export function ServerDetailSheet() {
         <div className="flex-1 space-y-6 overflow-y-auto px-1 py-4">
           <section>
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Tools</h3>
-            <div className="flex items-center gap-2">
+            <div className="mb-2 flex items-center gap-2">
               <Badge variant="secondary">{server.tools.length}</Badge>
               <span className="text-sm text-muted-foreground">
-                {server.tools.length === 0 ? 'No tools discovered.' : `Discovered ${server.tools.length} tools.`}
+                {server.tools.length === 0 ? 'No tools discovered.' : 'Click a tool to inspect & test it.'}
               </span>
             </div>
+            {server.tools.length > 0 && (
+              <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border border-border p-1">
+                {server.tools.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => navigate(`/tools/${encodeURIComponent(t)}`)}
+                    className="block w-full truncate rounded px-2 py-1 text-left font-mono text-xs hover:bg-muted"
+                    title={t}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           <Separator />

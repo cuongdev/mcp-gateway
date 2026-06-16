@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, apiPatch, apiPut } from '@/lib/api';
+import { api, apiPatch, apiPost, apiPut } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import type { ToolSummary } from '@/types/api';
 
@@ -23,6 +23,17 @@ export function useToggleTool() {
       qc.invalidateQueries({ queryKey: queryKeys.tools() });
     },
     onError: (err: Error) => toast.error(`Toggle failed: ${err.message}`),
+  });
+}
+
+export interface ToolCallResult { result?: unknown; error?: unknown }
+
+/** Test-invoke a tool through its upstream (admin playground). */
+export function useCallTool() {
+  return useMutation({
+    mutationFn: (input: { name: string; args: Record<string, unknown> }) =>
+      apiPost<ToolCallResult>(`/api/tools/${encodeURIComponent(input.name)}/call`, { arguments: input.args }),
+    onError: (err: Error) => toast.error(`Call failed: ${err.message}`),
   });
 }
 
