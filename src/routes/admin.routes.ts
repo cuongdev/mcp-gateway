@@ -105,6 +105,28 @@ interface AdminRouteDeps {
   virtualToolExecutor?: import('../virtual-tools/executor.js').VirtualToolExecutor;
 }
 
+/** Validate a (possibly UI-edited) import transport into a known stdio/http shape. */
+function sanitizeImportTransport(t: unknown): TransportConfig | null {
+  if (!t || typeof t !== "object") return null;
+  const o = t as Record<string, unknown>;
+  if (o.type === "stdio" && typeof o.command === "string" && o.command.trim()) {
+    return {
+      type: "stdio",
+      command: o.command,
+      args: Array.isArray(o.args) ? o.args.filter((x): x is string => typeof x === "string") : [],
+      ...(o.env && typeof o.env === "object" ? { env: o.env as Record<string, string> } : {}),
+    } as TransportConfig;
+  }
+  if ((o.type === "streamable-http" || o.type === "sse") && typeof o.url === "string" && o.url.trim()) {
+    return {
+      type: o.type,
+      url: o.url,
+      ...(o.headers && typeof o.headers === "object" ? { headers: o.headers as Record<string, string> } : {}),
+    } as TransportConfig;
+  }
+  return null;
+}
+
 /**
  * Build the admin/developer REST API routes.
  */
@@ -385,27 +407,42 @@ export function createAdminRoutes(deps: AdminRouteDeps) {
    */
   app.post("/servers/import", async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const parsed = parseMcpImport((body as any).config ?? body);
 
+    // Preview: parse a client config and return the detected servers.
     if ((body as any).dryRun) {
+      const parsed = parseMcpImport((body as any).config ?? body);
       return c.json({ source: parsed.source, servers: parsed.servers, warnings: parsed.warnings });
     }
 
-    const only: string[] | undefined = Array.isArray((body as any).only)
-      ? ((body as any).only as string[])
-      : undefined;
-    const toImport = parsed.servers.filter((s) => !only || only.includes(s.name));
+    // Resolve the list to register. Preferred: an explicit (possibly UI-edited)
+    // `servers: [{name, transport}]`. Fallback: parse `config` + filter by `only`.
+    let toImport: Array<{ name: string; transport: TransportConfig }>;
+    if (Array.isArray((body as any).servers)) {
+      toImport = [];
+      for (const s of (body as any).servers as Array<{ name?: unknown; transport?: unknown }>) {
+        const transport = sanitizeImportTransport(s.transport);
+        if (typeof s.name === "string" && s.name.trim() && transport) {
+          toImport.push({ name: s.name, transport });
+        }
+      }
+    } else {
+      const parsed = parseMcpImport((body as any).config ?? body);
+      const only: string[] | undefined = Array.isArray((body as any).only) ? ((body as any).only as string[]) : undefined;
+      toImport = parsed.servers
+        .filter((s) => !only || only.includes(s.name))
+        .map((s) => ({ name: s.name, transport: s.transport as TransportConfig }));
+    }
 
     const results: Array<{ name: string; ok: boolean; tools?: string[]; warning?: string; error?: string }> = [];
     for (const s of toImport) {
       try {
-        const res = await registerHttpOrStdioServer(s.name, s.transport as TransportConfig);
+        const res = await registerHttpOrStdioServer(s.name, s.transport);
         results.push({ name: s.name, ok: true, tools: res.tools, ...(res.warning ? { warning: res.warning } : {}) });
       } catch (err) {
         results.push({ name: s.name, ok: false, error: (err as Error).message });
       }
     }
-    return c.json({ source: parsed.source, results, warnings: parsed.warnings }, 201);
+    return c.json({ results }, 201);
   });
 
   /** Deregister a server */

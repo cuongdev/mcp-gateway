@@ -53,12 +53,12 @@ export function useImportPreview() {
   });
 }
 
-/** Register the selected servers from a client config. */
+/** Register an explicit (possibly edited) list of servers. */
 export function useImportServers() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { config: string; only: string[] }) =>
-      apiPost<ImportResults>('/api/servers/import', { config: input.config, only: input.only }),
+    mutationFn: (servers: Array<{ name: string; transport: Record<string, unknown> }>) =>
+      apiPost<ImportResults>('/api/servers/import', { servers }),
     onSuccess: (data) => {
       const okCount = data.results.filter((r) => r.ok).length;
       const failCount = data.results.length - okCount;
