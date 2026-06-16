@@ -56,7 +56,7 @@ File mặc định `config/gateway.config.json` thể hiện thiết lập tối
 {
   "mode": "development",
   "gateway": {
-    "port": 3000,
+    "port": 3100,
     "host": "0.0.0.0",
     "mcpPath": "/mcp",
     "apiPath": "/api",
@@ -125,7 +125,7 @@ Tất cả biến môi trường đều ghi đè lên giá trị tương ứng t
 | Biến | Khóa cấu hình | Mô tả |
 |---|---|---|
 | `GATEWAY_MODE` | `mode` | `development` hoặc `enterprise` |
-| `GATEWAY_PORT` | `gateway.port` | Cổng HTTP lắng nghe (mặc định `3000`) |
+| `GATEWAY_PORT` | `gateway.port` | Cổng HTTP lắng nghe (mặc định `3100`) |
 | `GATEWAY_HOST` | `gateway.host` | Địa chỉ bind (mặc định `0.0.0.0`) |
 | `GATEWAY_CONFIG` | — | Đường dẫn đến file cấu hình |
 | `GATEWAY_SESSION_SECRET` | `session.secret` | Bí mật để ký session cookie |
@@ -175,7 +175,7 @@ npm run dev:web      # Vite dev server cho dashboard (terminal riêng)
 
 ## 5. Truy cập Dashboard
 
-Mở trình duyệt tại `http://localhost:3000/dashboard`.
+Mở trình duyệt tại `http://localhost:3100/dashboard`.
 
 ![MCP Gateway dashboard](../images/overview.png)
 

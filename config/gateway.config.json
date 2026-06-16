@@ -1,7 +1,7 @@
 {
   "mode": "development",
   "gateway": {
-    "port": 3000,
+    "port": 3100,
     "host": "0.0.0.0",
     "mcpPath": "/mcp",
     "apiPath": "/api",

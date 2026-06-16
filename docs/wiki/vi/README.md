@@ -31,7 +31,7 @@ màn hình kèm ảnh chụp và các bước thao tác chi tiết.
 
 ## Tham khảo nhanh
 
-- **Chạy:** `npm install && npm run build && npm start`, rồi mở `http://localhost:3000/dashboard`.
+- **Chạy:** `npm install && npm run build && npm start`, rồi mở `http://localhost:3100/dashboard`.
 - **Chế độ:** `development` (mở, có nút dev-login) so với `enterprise` (OIDC + auth nghiêm ngặt) — xem [Bắt đầu](./getting-started.md).
 - **Cấu hình:** `config/gateway.config.json` cùng các biến môi trường ghi đè — xem [Bắt đầu](./getting-started.md).
 

@@ -30,7 +30,7 @@ every screen with screenshots and step-by-step instructions.
 
 ## Quick reference
 
-- **Run it:** `npm install && npm run build && npm start`, then open `http://localhost:3000/dashboard`.
+- **Run it:** `npm install && npm run build && npm start`, then open `http://localhost:3100/dashboard`.
 - **Modes:** `development` (open, dev-login button) vs `enterprise` (OIDC + strict auth) — see [Getting Started](./getting-started.md).
 - **Configuration:** `config/gateway.config.json` plus environment overrides — see [Getting Started](./getting-started.md).
 

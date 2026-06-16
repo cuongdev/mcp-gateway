@@ -56,7 +56,7 @@ The default `config/gateway.config.json` shows a minimal development setup:
 {
   "mode": "development",
   "gateway": {
-    "port": 3000,
+    "port": 3100,
     "host": "0.0.0.0",
     "mcpPath": "/mcp",
     "apiPath": "/api",
@@ -125,7 +125,7 @@ All environment variables override the corresponding config-file key at startup.
 | Variable | Config key | Description |
 |---|---|---|
 | `GATEWAY_MODE` | `mode` | `development` or `enterprise` |
-| `GATEWAY_PORT` | `gateway.port` | HTTP listen port (default `3000`) |
+| `GATEWAY_PORT` | `gateway.port` | HTTP listen port (default `3100`) |
 | `GATEWAY_HOST` | `gateway.host` | Bind address (default `0.0.0.0`) |
 | `GATEWAY_CONFIG` | — | Path to the config file |
 | `GATEWAY_SESSION_SECRET` | `session.secret` | Secret for signed session cookies |
@@ -175,7 +175,7 @@ npm run dev:web      # Vite dev server for the dashboard (separate terminal)
 
 ## 5. Access the dashboard
 
-Open your browser at `http://localhost:3000/dashboard`.
+Open your browser at `http://localhost:3100/dashboard`.
 
 ![MCP Gateway dashboard](../images/overview.png)
 
