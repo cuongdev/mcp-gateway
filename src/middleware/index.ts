@@ -117,14 +117,15 @@ export function buildMiddlewarePipeline(
       secret: sessionSecret,
       cookieName,
     });
-    if (config.auth?.requireAuthForApi) {
-      app.use(`${apiPath}/*`, cookieMw);
-    }
-    if (config.auth?.requireAuthForMcp) {
-      app.use(`${mcpPath}/*`, cookieMw);
-      app.use(`${mcpPath}`, cookieMw);
-    }
-    log.info({ cookieName }, "Registered: Session-cookie middleware (before bearer-token)");
+    // Resolve the session cookie on EVERY route (it never 401s — it passes
+    // through on an absent/invalid cookie). This must include `/auth` so that
+    // GET /auth/me reflects the logged-in principal after OIDC/dev login.
+    // Gating it to the API path alone left /auth/me unauthenticated in
+    // enterprise mode, bouncing the dashboard back to /login despite a valid
+    // session cookie. Bearer-token auth stays scoped to the protected paths
+    // below because it DOES 401.
+    app.use("*", cookieMw);
+    log.info({ cookieName }, "Registered: Session-cookie middleware (global, before bearer-token)");
   }
 
   // ── 4c. Bearer token authentication ─────────────────
