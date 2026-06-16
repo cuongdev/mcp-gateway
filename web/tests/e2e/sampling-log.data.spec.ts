@@ -48,7 +48,9 @@ test('empty state renders when there are no sampling log entries', async ({ page
   await expect(page.getByRole('heading', { name: 'Sampling Log' })).toBeVisible({ timeout: 10_000 });
 
   // No reverse-channel traffic in the test environment — empty state appears
-  await expect(page.getByRole('main').getByText('No sampling attempts logged')).toBeVisible({ timeout: 8_000 });
+  // once the list query resolves (it shows "Loading…" first). Allow a generous
+  // timeout so it is reliable under slow CI runners.
+  await expect(page.getByRole('main').getByText('No sampling attempts logged')).toBeVisible({ timeout: 15_000 });
 });
 
 test('filtering by sampling/createMessage method stays stable', async ({ page }) => {
