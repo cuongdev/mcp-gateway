@@ -53,12 +53,12 @@ export interface SeedApi {
 
 export async function createSeedApi(playwright: Playwright, baseURL: string): Promise<SeedApi> {
   const ctx = await playwright.request.newContext({ baseURL });
-  // Best-effort: in dev mode (NODE_ENV=test) the gateway auto-injects an
-  // anonymous service_account principal and leaves the admin API open
+  // In dev mode (NODE_ENV=test) the gateway injects an anonymous
+  // service_account principal and leaves the admin API open
   // (requireAuthForApi=false), so seeding works without a session cookie.
-  // dev-login itself 500s in pure dev mode (no auth.sessionCookieSecret
-  // default), which is harmless here — we never depend on the cookie.
-  await ctx.post('/auth/dev-login').catch(() => undefined);
+  // We deliberately do NOT call POST /auth/dev-login: it now succeeds (dev
+  // defaults a session-cookie secret) and would upsert a stray "Developer"
+  // user, polluting the Users list for other specs.
 
   const cleanups: Array<() => Promise<void>> = [];
 
